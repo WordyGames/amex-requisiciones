@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Panel de Compras - Requisiciones</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root{
+    --accent:#1b3a6b;
+    --accent-dark:#122a4d;
+    --accent-soft:#eef2f8;
+    --ink:#1c1f26;
+    --muted:#6b7280;
+    --border:#d8dde3;
+    --bg:#f4f6f9;
+    --card:#ffffff;
+    --danger:#c0392b;
+    --ok:#1a7a3c;
+    --warn:#a8710a;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);}
+  .app{max-width:1180px;margin:0 auto;padding:28px 20px 60px;}
+  h1{font-size:22px;margin:0;color:var(--accent-dark);}
+  .sub{color:var(--muted);font-size:13px;margin:2px 0 0;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px 22px;margin-bottom:18px;}
+  .header-row{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:18px;}
+  a{color:var(--accent);text-decoration:none;font-weight:600;font-size:13px;}
+
+  .id-overlay{position:fixed;inset:0;background:rgba(15,20,30,0.6);display:flex;align-items:center;justify-content:center;z-index:1000;padding:20px;}
+  .id-overlay.hidden{display:none;}
+  .id-box{background:#fff;border-radius:var(--radius);padding:26px;max-width:360px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.25);}
+  .id-box input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;margin-top:4px;}
+  .id-box label{display:block;font-size:12px;color:var(--muted);font-weight:600;margin-top:12px;}
+  button{font-family:inherit;cursor:pointer;}
+  .primary{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:600;}
+  .secondary{background:var(--accent-soft);color:var(--accent-dark);border:1px solid var(--border);border-radius:8px;padding:9px 14px;font-size:13px;font-weight:600;}
+  .ghost{background:none;border:1px solid var(--border);border-radius:8px;padding:9px 14px;font-size:13px;color:var(--ink);}
+  .link{background:none;border:none;color:var(--muted);font-size:12.5px;text-decoration:underline;padding:0;}
+
+  .stats{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px;}
+  .stat{flex:1;min-width:120px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;border-top:4px solid var(--accent);}
+  .stat .n{font-size:24px;font-weight:700;color:var(--accent-dark);}
+  .stat .l{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.02em;}
+
+  .filters{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:14px;}
+  .filters > div{display:flex;flex-direction:column;gap:4px;}
+  .filters label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;}
+  .filters select, .filters input{padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{background:var(--accent-soft);color:var(--accent-dark);text-align:left;padding:9px 10px;font-size:11.5px;text-transform:uppercase;letter-spacing:.02em;}
+  td{padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:top;}
+  tr:hover td{background:#fafbfd;}
+  .badge{display:inline-block;background:var(--accent-soft);color:var(--accent-dark);border-radius:5px;padding:2px 8px;font-size:11px;font-weight:700;}
+  .estatus{display:inline-block;border-radius:5px;padding:3px 9px;font-size:11px;font-weight:700;}
+  .estatus.pendiente{background:#fdf0d5;color:var(--warn);}
+  .estatus.aprobada{background:#e3f3e9;color:var(--ok);}
+  .estatus.rechazada{background:#fbe4e1;color:var(--danger);}
+  .estatus.liberacion_pago{background:#fef3c7;color:#8a5a00;}
+  .estatus.en_transito{background:#e6ecf8;color:var(--accent-dark);}
+  .estatus.en_proceso_importacion{background:#eee4fb;color:#5b2a9e;}
+  .estatus.completada{background:#dff3e6;color:var(--ok);}
+  .empty{color:var(--muted);font-size:13px;padding:30px;text-align:center;}
+
+  .modal-overlay{position:fixed;inset:0;background:rgba(15,20,30,0.55);display:none;align-items:center;justify-content:center;z-index:900;padding:20px;}
+  .modal-overlay.open{display:flex;}
+  .modal{background:#fff;border-radius:var(--radius);padding:24px 26px;max-width:640px;width:100%;max-height:88vh;overflow:auto;box-shadow:0 10px 40px rgba(0,0,0,.25);}
+  .modal h2{margin-top:0;font-size:17px;color:var(--accent-dark);}
+  .modal label{display:block;font-size:12px;color:var(--muted);font-weight:600;margin-top:12px;}
+  .modal select, .modal textarea{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-top:4px;font-family:inherit;}
+  .modal textarea{min-height:70px;}
+  .kv{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0;font-size:13px;}
+  .kv div b{display:block;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;}
+  .items-mini{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:6px;}
+  .items-mini th, .items-mini td{border-bottom:1px solid var(--border);padding:5px 6px;text-align:left;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;}
+
+  .toast-wrap{position:fixed;top:18px;right:18px;z-index:1200;display:flex;flex-direction:column;gap:10px;max-width:340px;}
+  .toast{background:#fff;border-left:5px solid var(--accent);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:12px 14px;font-size:13px;animation:toast-in .2s ease-out;}
+  .toast b{display:block;color:var(--accent-dark);font-size:13px;margin-bottom:2px;}
+  @keyframes toast-in{from{transform:translateX(20px);opacity:0;}to{transform:translateX(0);opacity:1;}}
+  .nuevas-banner{background:var(--accent-soft);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:13px;color:var(--accent-dark);font-weight:600;}
+  tr.fila-nueva td{background:#fff8e6;}
+  .dot-nueva{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--danger);margin-right:6px;vertical-align:middle;}
+</style>
+</head>
+<body>
+
+<div id="gate-overlay" class="id-overlay">
+  <div class="id-box">
+    <h2 style="margin-top:0;">Panel de Compras</h2>
+    <div class="id-tabs" style="display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid var(--border);">
+      <button type="button" class="id-tab active" id="gate-tab-cuenta" style="flex:1;background:none;border:none;padding:8px 4px 10px;font-size:13px;font-weight:600;color:var(--accent-dark);cursor:pointer;border-bottom:2px solid var(--accent);" onclick="mostrarGateTab('cuenta')">Mi cuenta</button>
+      <button type="button" class="id-tab" id="gate-tab-codigo" style="flex:1;background:none;border:none;padding:8px 4px 10px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;" onclick="mostrarGateTab('codigo')">Código de acceso</button>
+    </div>
+    <div id="gate-panel-cuenta">
+      <p style="font-size:13px;color:var(--muted);">Entra con el usuario y contraseña de tu cuenta (si tienes acceso de Compras).</p>
+      <label>Usuario</label>
+      <input type="text" id="gate-cuenta-usuario" autocomplete="username" placeholder="Ej. lsolis">
+      <label style="margin-top:10px;">Contraseña</label>
+      <input type="password" id="gate-cuenta-password" autocomplete="current-password" placeholder="••••••">
+      <div id="gate-cuenta-error" style="color:var(--danger);font-size:12.5px;margin-top:8px;display:none;"></div>
+      <button class="primary" style="margin-top:16px;width:100%;" onclick="entrarConCuenta()">Entrar</button>
+    </div>
+    <div id="gate-panel-codigo" style="display:none;">
+      <p style="font-size:13px;color:var(--muted);">Acceso con el código compartido de Compras.</p>
+      <label>Código de acceso</label>
+      <input type="password" id="gate-clave" placeholder="••••••">
+      <div id="gate-error" style="color:var(--danger);font-size:12.5px;margin-top:8px;display:none;"></div>
+      <button class="primary" style="margin-top:16px;width:100%;" onclick="entrarPanel()">Entrar</button>
+    </div>
+  </div>
+</div>
+
+<div class="app" id="app-root" style="display:none;">
+
+  <div class="header-row">
+    <div>
+      <h1>Panel de Compras</h1>
+      <p class="sub">Todas las requisiciones de AMEX Machinery, Grupo Aromata y Liumaq, en un solo lugar.</p>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--muted);cursor:pointer;">
+        <input type="checkbox" id="chk-sonido" checked style="width:auto;margin:0;"> sonido
+      </label>
+      <a href="index.html" target="_blank">← Formulario de requisiciones</a>
+      <a href="ajustes.html" target="_blank">Ajustes →</a>
+    </div>
+  </div>
+
+  <div id="nuevas-banner"></div>
+  <div class="stats" id="stats"></div>
+
+  <div class="card">
+    <div class="filters">
+      <div>
+        <label>Empresa</label>
+        <select id="f-empresa" onchange="cargar()">
+          <option value="">Todas</option>
+          <option value="amex">AMEX Machinery</option>
+          <option value="aromata">Grupo Aromata</option>
+          <option value="liumaq">Liumaq</option>
+        </select>
+      </div>
+      <div>
+        <label>Estatus</label>
+        <select id="f-estatus" onchange="cargar()">
+          <option value="">Todos</option>
+          <option value="pendiente">Pendiente</option>
+          <option value="aprobada">Aprobada</option>
+          <option value="rechazada">Rechazada</option>
+          <option value="liberacion_pago">Liberación de pago</option>
+          <option value="en_transito">En tránsito</option>
+          <option value="en_proceso_importacion">En proceso de importación</option>
+          <option value="completada">Completo</option>
+        </select>
+      </div>
+      <div>
+        <label>Buscar (folio, solicita, depto)</label>
+        <input type="text" id="f-texto" placeholder="Ej. LIU-2026 o Juan" oninput="debounceCargar()">
+      </div>
+      <div>
+        <button class="secondary" onclick="exportarCSV()">Exportar (Excel)</button>
+      </div>
+      <div>
+        <button class="ghost" onclick="cargar()">Actualizar</button>
+      </div>
+    </div>
+
+    <div id="tabla-wrap"><div class="empty">Cargando…</div></div>
+  </div>
+
+</div>
+
+<div class="toast-wrap" id="toast-wrap"></div>
+
+<div class="modal-overlay" id="detalle-overlay">
+  <div class="modal" id="detalle-modal"></div>
+</div>
+
+<script>
+const SUPABASE_URL = "https://ygpaqyvgauljvtitlsmr.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlncGFxeXZnYXVsanZ0aXRsc21yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcwNzI4NjAsImV4cCI6MjEwMjY0ODg2MH0.FwPmbulUEOdDs9QUdyGmvcaHUJWgBLy-CkU6cqqqxwM";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const COMPANIES = {
+  amex: { name: "AMEX Machinery" },
+  aromata: { name: "Grupo Aromata" },
+  liumaq: { name: "Liumaq" }
+};
+const ESTATUS_LABEL = { pendiente:"Pendiente", aprobada:"Aprobada", rechazada:"Rechazada", liberacion_pago:"Liberación de pago", en_transito:"En tránsito", en_proceso_importacion:"En proceso de importación", completada:"Completo" };
+
+let clave = null;
+let rows = [];
+let debounceTimer = null;
+let visitaAnterior = null; // última vez que Paco abrió el panel, antes de esta sesión
+let sinLeer = 0;
+let tituloOriginal = document.title;
+let idsConocidos = new Set();
+let pollTimer = null;
+
+function money(n){
+  n = Number(n) || 0;
+  return "$" + n.toLocaleString("es-MX", {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
+// --- sonido de aviso (beep corto generado, sin archivos externos) ---
+function reproducirBeep(){
+  if(!document.getElementById("chk-sonido").checked) return;
+  try{
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.type = "sine"; o.frequency.value = 880;
+    g.gain.value = 0.06;
+    o.start();
+    setTimeout(()=>{ o.stop(); ctx.close(); }, 180);
+  }catch(e){}
+}
+
+function mostrarToast(mensaje, detalle){
+  const wrap = document.getElementById("toast-wrap");
+  const div = document.createElement("div");
+  div.className = "toast";
+  div.innerHTML = `<b>${escapeHtml(mensaje)}</b>${detalle ? escapeHtml(detalle) : ""}`;
+  wrap.appendChild(div);
+  setTimeout(()=>{ div.remove(); }, 9000);
+}
+
+function actualizarTituloSinLeer(){
+  document.title = sinLeer > 0 ? `(${sinLeer}) ${tituloOriginal}` : tituloOriginal;
+}
+
+function marcarComoLeido(){
+  sinLeer = 0;
+  actualizarTituloSinLeer();
+}
+window.addEventListener("focus", marcarComoLeido);
+
+function iniciarSondeo(){
+  if(pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(cargar, 20000);
+}
+
+function mostrarGateTab(tab){
+  document.getElementById("gate-tab-cuenta").classList.toggle("active", tab === "cuenta");
+  document.getElementById("gate-tab-codigo").classList.toggle("active", tab === "codigo");
+  document.getElementById("gate-tab-cuenta").style.color = tab === "cuenta" ? "var(--accent-dark)" : "var(--muted)";
+  document.getElementById("gate-tab-cuenta").style.borderBottomColor = tab === "cuenta" ? "var(--accent)" : "transparent";
+  document.getElementById("gate-tab-codigo").style.color = tab === "codigo" ? "var(--accent-dark)" : "var(--muted)";
+  document.getElementById("gate-tab-codigo").style.borderBottomColor = tab === "codigo" ? "var(--accent)" : "transparent";
+  document.getElementById("gate-panel-cuenta").style.display = tab === "cuenta" ? "block" : "none";
+  document.getElementById("gate-panel-codigo").style.display = tab === "codigo" ? "block" : "none";
+}
+function entrarConClaveValida(val){
+  clave = val;
+  sessionStorage.setItem("amex_compras_clave", val);
+  document.getElementById("gate-overlay").classList.add("hidden");
+  document.getElementById("app-root").style.display = "block";
+
+  visitaAnterior = localStorage.getItem("amex_compras_ultima_visita");
+  localStorage.setItem("amex_compras_ultima_visita", new Date().toISOString());
+
+  cargar();
+  iniciarSondeo();
+}
+async function forzarCambioPasswordSiNecesario(p, passwordUsada){
+  if(!p.debe_cambiar_password) return true;
+  alert("Por seguridad, antes de continuar tienes que poner una contraseña nueva (la que te dieron es temporal).");
+  while(true){
+    const nueva = prompt("Escribe tu nueva contraseña (mínimo 4 caracteres):");
+    if(nueva === null){ alert("Tienes que cambiar tu contraseña para poder entrar."); continue; }
+    if(nueva.length < 4){ alert("Mínimo 4 caracteres."); continue; }
+    try{
+      const { error } = await sb.rpc("cambiar_password_propia", { p_persona_id: p.id, p_password_actual: passwordUsada, p_password_nueva: nueva });
+      if(error) throw error;
+      alert("Contraseña actualizada. Ya puedes usar tu cuenta normalmente.");
+      return true;
+    }catch(e){
+      alert("No se pudo cambiar: " + e.message);
+    }
+  }
+}
+async function entrarConCuenta(){
+  const usuario = document.getElementById("gate-cuenta-usuario").value.trim();
+  const password = document.getElementById("gate-cuenta-password").value;
+  const err = document.getElementById("gate-cuenta-error");
+  if(!usuario || !password){ err.textContent = "Escribe tu usuario y contraseña."; err.style.display = "block"; return; }
+  err.style.display = "none";
+  try{
+    const { data: persona, error: errLogin } = await sb.rpc("iniciar_sesion", { p_usuario: usuario, p_password: password });
+    if(errLogin) throw errLogin;
+    const p = Array.isArray(persona) ? persona[0] : persona;
+    if(!p) throw new Error("Usuario o contraseña incorrectos");
+    await forzarCambioPasswordSiNecesario(p, password);
+    const { data: claveAdmin, error: errAcceso } = await sb.rpc("acceso_admin", { p_persona_id: p.id, p_tipo: "compras" });
+    if(errAcceso) throw errAcceso;
+    if(!claveAdmin){
+      err.textContent = "Tu cuenta no tiene acceso a Compras. Usa la pestaña de código, o pide acceso en Ajustes.";
+      err.style.display = "block";
+      return;
+    }
+    localStorage.setItem("amex_compras_nombre", p.nombre);
+    entrarConClaveValida(claveAdmin);
+  }catch(e){
+    err.textContent = e.message.includes("incorrectos") ? "Usuario o contraseña incorrectos." : "Error: " + e.message;
+    err.style.display = "block";
+  }
+}
+async function entrarPanel(){
+  const val = document.getElementById("gate-clave").value.trim();
+  const err = document.getElementById("gate-error");
+  if(!val){ err.textContent = "Escribe el código de acceso."; err.style.display="block"; return; }
+  try{
+    const { data, error } = await sb.rpc("verificar_clave_compras", { p_clave: val });
+    if(error) throw error;
+    if(!data){
+      err.textContent = "Código incorrecto.";
+      err.style.display = "block";
+      return;
+    }
+    entrarConClaveValida(val);
+  }catch(e){
+    err.textContent = "Error de conexión: " + e.message;
+    err.style.display = "block";
+  }
+}
+
+function debounceCargar(){
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(cargar, 350);
+}
+
+async function cargar(){
+  const wrap = document.getElementById("tabla-wrap");
+  wrap.innerHTML = '<div class="empty">Cargando…</div>';
+  const empresa = document.getElementById("f-empresa").value;
+  const estatus = document.getElementById("f-estatus").value;
+  const texto = document.getElementById("f-texto").value.trim();
+  try{
+    const { data, error } = await sb.rpc("listar_requisiciones_compras", {
+      p_clave: clave, p_empresa: empresa || null, p_estatus: estatus || null, p_texto: texto || null
+    });
+    if(error) throw error;
+    const nuevasIds = (data||[]).map(r=>r.id).filter(id => idsConocidos.size && !idsConocidos.has(id));
+    if(idsConocidos.size && nuevasIds.length){
+      (data||[]).filter(r=>nuevasIds.includes(r.id)).forEach(r=>{
+        const c = COMPANIES[r.empresa] || { name: r.empresa };
+        mostrarToast("Nueva requisición: " + r.folio, c.name + " · " + (r.creado_por || r.solicita || "—"));
+      });
+      reproducirBeep();
+      if(!document.hasFocus()){ sinLeer += nuevasIds.length; actualizarTituloSinLeer(); }
+    }
+    idsConocidos = new Set((data||[]).map(r=>r.id));
+    rows = data || [];
+    renderStats(rows);
+    renderTabla(rows);
+    renderBannerNuevas(rows);
+  }catch(e){
+    wrap.innerHTML = '<div class="empty">Error al cargar: ' + e.message + '</div>';
+  }
+}
+
+function renderStats(list){
+  const counts = { pendiente:0, aprobada:0, rechazada:0, liberacion_pago:0, en_transito:0, en_proceso_importacion:0, completada:0 };
+  let totalMonto = 0;
+  list.forEach(r=>{ counts[r.estatus] = (counts[r.estatus]||0)+1; totalMonto += Number(r.total)||0; });
+  const stats = document.getElementById("stats");
+  stats.innerHTML = `
+    <div class="stat"><div class="n">${list.length}</div><div class="l">Requisiciones (vista actual)</div></div>
+    <div class="stat"><div class="n">${counts.pendiente}</div><div class="l">Pendientes</div></div>
+    <div class="stat"><div class="n">${counts.aprobada}</div><div class="l">Aprobadas</div></div>
+    <div class="stat"><div class="n">${counts.en_transito + counts.en_proceso_importacion}</div><div class="l">En camino</div></div>
+    <div class="stat"><div class="n">${counts.completada}</div><div class="l">Completadas</div></div>
+    <div class="stat"><div class="n">${money(totalMonto)}</div><div class="l">Monto total</div></div>
+  `;
+}
+
+function escapeHtml(s){
+  return String(s == null ? "" : s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function esNueva(r){
+  return visitaAnterior && new Date(r.created_at) > new Date(visitaAnterior);
+}
+
+function renderTabla(list){
+  const wrap = document.getElementById("tabla-wrap");
+  if(list.length === 0){
+    wrap.innerHTML = '<div class="empty">No hay requisiciones con estos filtros.</div>';
+    return;
+  }
+  const rowsHtml = list.map(r=>{
+    const c = COMPANIES[r.empresa] || { name: r.empresa };
+    const nueva = esNueva(r);
+    return `<tr class="${nueva ? "fila-nueva" : ""}">
+      <td><span class="badge">${c.name}</span></td>
+      <td>${nueva ? '<span class="dot-nueva" title="Nueva desde tu última visita"></span>' : ""}${escapeHtml(r.folio)}</td>
+      <td>${r.fecha||"—"}</td>
+      <td>${escapeHtml(r.depto)||"—"}</td>
+      <td>${escapeHtml(r.creado_por || r.solicita) || "—"}</td>
+      <td style="text-align:right">${money(r.total)}</td>
+      <td><span class="estatus ${r.estatus}">${ESTATUS_LABEL[r.estatus]||r.estatus}</span></td>
+      <td><button class="ghost" onclick="verDetalle('${r.id}')">Ver / gestionar</button></td>
+    </tr>`;
+  }).join("");
+  wrap.innerHTML = `<table>
+    <thead><tr><th>Empresa</th><th>Folio</th><th>Fecha</th><th>Depto</th><th>Solicita</th><th style="text-align:right">Total</th><th>Estatus</th><th></th></tr></thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>`;
+}
+
+function renderBannerNuevas(list){
+  const banner = document.getElementById("nuevas-banner");
+  const nuevas = list.filter(esNueva);
+  if(!visitaAnterior || nuevas.length === 0){
+    banner.innerHTML = "";
+    return;
+  }
+  banner.innerHTML = `<div class="nuevas-banner">
+    <span>📥 ${nuevas.length} requisición${nuevas.length===1?"":"es"} nueva${nuevas.length===1?"":"s"} desde tu última visita.</span>
+    <button class="link" onclick="quitarBannerNuevas()">marcar como vistas</button>
+  </div>`;
+}
+
+function quitarBannerNuevas(){
+  visitaAnterior = new Date().toISOString();
+  localStorage.setItem("amex_compras_ultima_visita", visitaAnterior);
+  renderTabla(rows);
+  renderBannerNuevas(rows);
+}
+
+function verDetalle(id){
+  const r = rows.find(x=>x.id === id);
+  if(!r) return;
+  const c = COMPANIES[r.empresa] || { name: r.empresa };
+  const itemsHtml = (r.items||[]).map(it=>`
+    <tr>
+      <td>${escapeHtml(it.desc)}</td>
+      <td>${escapeHtml(it.prov)}</td>
+      <td style="text-align:center">${it.cant}</td>
+      <td style="text-align:right">${money(it.price)}</td>
+      <td style="text-align:right">${money((Number(it.cant)||0)*(Number(it.price)||0))}</td>
+    </tr>`).join("");
+
+  const modal = document.getElementById("detalle-modal");
+  modal.innerHTML = `
+    <h2>${c.name} — Folio ${escapeHtml(r.folio)}</h2>
+    <div class="kv">
+      <div><b>Fecha</b>${r.fecha||"—"}</div>
+      <div><b>Fecha requerida</b>${r.fecha_requerida||"—"}</div>
+      <div><b>Departamento</b>${escapeHtml(r.depto)||"—"}</div>
+      <div><b>Registrado por</b>${escapeHtml(r.creado_por)||"—"}</div>
+      <div><b>Solicita</b>${escapeHtml(r.solicita)||"—"}</div>
+      <div><b>Autoriza</b>${escapeHtml(r.autoriza)||"—"}</div>
+    </div>
+    <div><b style="font-size:11px;color:var(--muted);text-transform:uppercase;">Motivo</b><p style="font-size:13px;margin:4px 0 0;">${escapeHtml(r.motivo)||"—"}</p></div>
+    <table class="items-mini">
+      <thead><tr><th>Descripción</th><th>Proveedor</th><th>Cant.</th><th>Precio</th><th>Importe</th></tr></thead>
+      <tbody>${itemsHtml}</tbody>
+    </table>
+    <div style="text-align:right;margin-top:8px;font-size:13px;">
+      Subtotal: ${money(r.subtotal)}${r.iva ? " · IVA: " + money(r.iva_monto) : ""} · <b>Total: ${money(r.total)}</b>
+    </div>
+
+    <label>Estatus</label>
+    <select id="edit-estatus">
+      ${Object.keys(ESTATUS_LABEL).map(k=>`<option value="${k}" ${k===r.estatus?"selected":""}>${ESTATUS_LABEL[k]}</option>`).join("")}
+    </select>
+
+    <label>Comentario para quien solicitó (sí lo ve en su formulario)</label>
+    <textarea id="edit-comentario" placeholder="Ej. aprobado, en camino, llega la próxima semana...">${escapeHtml(r.comentario_solicitante)}</textarea>
+
+    <label>Notas internas de Compras (privadas, no las ve quien solicita)</label>
+    <textarea id="edit-nota" placeholder="Ej. cotizado con proveedor X, costo real, etc.">${escapeHtml(r.nota_interna)}</textarea>
+
+    <label>Tu nombre (para el historial de cambios)</label>
+    <input type="text" id="edit-actualizado-por" placeholder="Ej. Paco" value="${escapeHtml(localStorage.getItem("amex_compras_nombre") || "")}">
+
+    <div id="historial-wrap" style="margin-top:14px;">
+      <button type="button" class="link" onclick="verHistorial('${r.id}')">Ver historial de cambios</button>
+      <div id="historial-list"></div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="ghost" onclick="cerrarDetalle()">Cerrar</button>
+      <button class="primary" onclick="guardarDetalle('${r.id}')">Guardar cambios</button>
+    </div>
+  `;
+  document.getElementById("detalle-overlay").classList.add("open");
+}
+
+async function verHistorial(id){
+  const wrap = document.getElementById("historial-list");
+  wrap.innerHTML = '<div class="empty" style="padding:10px;">Cargando historial…</div>';
+  try{
+    const { data, error } = await sb.rpc("historial_requisicion", { p_id: id, p_clave: clave });
+    if(error) throw error;
+    if(!data || data.length === 0){
+      wrap.innerHTML = '<div class="hint" style="margin-top:8px;">Sin cambios registrados todavía.</div>';
+      return;
+    }
+    wrap.innerHTML = `<table class="items-mini" style="margin-top:8px;">
+      <thead><tr><th>Fecha</th><th>Estatus</th><th>Por</th></tr></thead>
+      <tbody>${data.map(h => `<tr>
+        <td>${new Date(h.cambiado_en).toLocaleString("es-MX")}</td>
+        <td>${ESTATUS_LABEL[h.estatus_nuevo]||h.estatus_nuevo||"—"}${h.estatus_anterior && h.estatus_anterior !== h.estatus_nuevo ? ` <span class="hint" style="margin:0;">(antes: ${ESTATUS_LABEL[h.estatus_anterior]||h.estatus_anterior})</span>` : ""}</td>
+        <td>${escapeHtml(h.actualizado_por)||"—"}</td>
+      </tr>`).join("")}</tbody>
+    </table>`;
+  }catch(e){
+    wrap.innerHTML = '<div class="empty">No se pudo cargar el historial: ' + e.message + '</div>';
+  }
+}
+
+function cerrarDetalle(){
+  document.getElementById("detalle-overlay").classList.remove("open");
+}
+
+async function guardarDetalle(id){
+  const estatus = document.getElementById("edit-estatus").value;
+  const nota = document.getElementById("edit-nota").value;
+  const comentario = document.getElementById("edit-comentario").value;
+  const actualizadoPor = document.getElementById("edit-actualizado-por").value.trim();
+  try{
+    if(actualizadoPor) localStorage.setItem("amex_compras_nombre", actualizadoPor);
+    const { data, error } = await sb.rpc("actualizar_requisicion", {
+      p_id: id, p_estatus: estatus, p_nota: nota, p_clave: clave, p_comentario: comentario,
+      p_actualizado_por: actualizadoPor || null
+    });
+    if(error) throw error;
+    cerrarDetalle();
+    cargar();
+  }catch(e){
+    alert("No se pudo guardar: " + e.message);
+  }
+}
+
+function csvField(v){
+  const s = String(v == null ? "" : v).replace(/"/g, '""');
+  return '"' + s + '"';
+}
+function exportarCSV(){
+  if(rows.length === 0){ alert("No hay datos para exportar con estos filtros."); return; }
+  const headers = ["Empresa","Folio","Fecha","Fecha requerida","Departamento","Registrado por","Solicita","Autoriza","Motivo","No. artículos","Subtotal","IVA monto","Incluye IVA","Total","Estatus","Comentario a solicitante","Notas internas"];
+  const lines = [headers.map(csvField).join(",")];
+  rows.forEach(r=>{
+    const c = COMPANIES[r.empresa] || { name: r.empresa };
+    lines.push([
+      c.name, r.folio, r.fecha, r.fecha_requerida, r.depto, r.creado_por, r.solicita, r.autoriza, r.motivo,
+      (r.items||[]).length, r.subtotal, r.iva_monto, r.iva ? "Sí":"No", r.total, ESTATUS_LABEL[r.estatus]||r.estatus, r.comentario_solicitante, r.nota_interna
+    ].map(csvField).join(","));
+  });
+  const csv = "﻿" + lines.join("\r\n");
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const d = new Date();
+  a.href = url;
+  a.download = "requisiciones_compras_" + d.getFullYear() + String(d.getMonth()+1).padStart(2,"0") + String(d.getDate()).padStart(2,"0") + ".csv";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// init: si ya se validó la clave en esta pestaña, entra directo
+const claveGuardada = sessionStorage.getItem("amex_compras_clave");
+if(claveGuardada){
+  document.getElementById("gate-clave").value = claveGuardada;
+  entrarPanel();
+}
+</script>
+</body>
+</html>

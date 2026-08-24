@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ajustes - Requisiciones</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root{
+    --accent:#1b3a6b;
+    --accent-dark:#122a4d;
+    --accent-soft:#eef2f8;
+    --ink:#1c1f26;
+    --muted:#6b7280;
+    --border:#d8dde3;
+    --bg:#f4f6f9;
+    --card:#ffffff;
+    --danger:#c0392b;
+    --ok:#1a7a3c;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);}
+  .app{max-width:900px;margin:0 auto;padding:28px 20px 60px;}
+  h1{font-size:22px;margin:0;color:var(--accent-dark);}
+  h2{font-size:15px;letter-spacing:.02em;color:var(--accent-dark);text-transform:uppercase;margin:0 0 14px;}
+  .sub{color:var(--muted);font-size:13px;margin:2px 0 0;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px 22px;margin-bottom:18px;}
+  .header-row{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:18px;}
+  a{color:var(--accent);text-decoration:none;font-weight:600;font-size:13px;}
+
+  .id-overlay{position:fixed;inset:0;background:rgba(15,20,30,0.6);display:flex;align-items:center;justify-content:center;z-index:1000;padding:20px;}
+  .id-overlay.hidden{display:none;}
+  .id-box{background:#fff;border-radius:var(--radius);padding:26px;max-width:360px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.25);}
+  .id-box input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;margin-top:4px;}
+  .id-box label{display:block;font-size:12px;color:var(--muted);font-weight:600;margin-top:12px;}
+
+  button{font-family:inherit;cursor:pointer;}
+  .primary{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:600;}
+  .secondary{background:var(--accent-soft);color:var(--accent-dark);border:1px solid var(--border);border-radius:8px;padding:9px 14px;font-size:13px;font-weight:600;}
+  .ghost{background:none;border:1px solid var(--border);border-radius:8px;padding:7px 12px;font-size:12.5px;color:var(--ink);}
+  .danger-btn{background:none;border:1px solid var(--danger);border-radius:8px;padding:7px 12px;font-size:12.5px;color:var(--danger);}
+  .link{background:none;border:none;color:var(--muted);font-size:12.5px;text-decoration:underline;padding:0;}
+
+  label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:600;}
+  input[type=text],input[type=password]{
+    width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:7px;
+    font-size:14px;font-family:inherit;background:#fff;color:var(--ink);
+  }
+  .row-inline{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;}
+  .row-inline > div{flex:1;min-width:160px;}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{background:var(--accent-soft);color:var(--accent-dark);text-align:left;padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.02em;}
+  td{padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:middle;}
+  .badge{display:inline-block;border-radius:5px;padding:2px 8px;font-size:11px;font-weight:700;}
+  .badge.activo{background:#e3f3e9;color:var(--ok);}
+  .badge.inactivo{background:#fbe4e1;color:var(--danger);}
+  .hint{font-size:12px;color:var(--muted);margin-top:6px;}
+  .empty{color:var(--muted);font-size:13px;padding:20px;text-align:center;}
+  .msg-ok{color:var(--ok);font-size:12.5px;margin-top:8px;}
+  .msg-err{color:var(--danger);font-size:12.5px;margin-top:8px;}
+  .actions-cell{display:flex;gap:6px;flex-wrap:wrap;}
+</style>
+</head>
+<body>
+
+<div id="gate-overlay" class="id-overlay">
+  <div class="id-box">
+    <h2 style="margin-top:0;">Ajustes</h2>
+    <div class="id-tabs" style="display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid var(--border);">
+      <button type="button" class="id-tab active" id="gate-tab-cuenta" style="flex:1;background:none;border:none;padding:8px 4px 10px;font-size:13px;font-weight:600;color:var(--accent-dark);cursor:pointer;border-bottom:2px solid var(--accent);" onclick="mostrarGateTab('cuenta')">Mi cuenta</button>
+      <button type="button" class="id-tab" id="gate-tab-nip" style="flex:1;background:none;border:none;padding:8px 4px 10px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;" onclick="mostrarGateTab('nip')">NIP</button>
+    </div>
+    <div id="gate-panel-cuenta">
+      <p style="font-size:13px;color:var(--muted);">Entra con el usuario y contraseña de tu cuenta (si tienes acceso de Ajustes).</p>
+      <label>Usuario</label>
+      <input type="text" id="gate-cuenta-usuario" autocomplete="username" placeholder="Ej. lsolis">
+      <label style="margin-top:10px;">Contraseña</label>
+      <input type="password" id="gate-cuenta-password" autocomplete="current-password" placeholder="••••••">
+      <div id="gate-cuenta-error" class="msg-err" style="display:none;"></div>
+      <button class="primary" style="margin-top:16px;width:100%;" onclick="entrarConCuenta()">Entrar</button>
+    </div>
+    <div id="gate-panel-nip" style="display:none;">
+      <p style="font-size:13px;color:var(--muted);">Tu NIP personal de Ajustes (distinto del código de Compras).</p>
+      <label>NIP</label>
+      <input type="password" id="gate-clave" placeholder="••••" inputmode="numeric">
+      <div id="gate-error" class="msg-err" style="display:none;"></div>
+      <button class="primary" style="margin-top:16px;width:100%;" onclick="entrarAjustes()">Entrar</button>
+    </div>
+  </div>
+</div>
+
+<div class="app" id="app-root" style="display:none;">
+
+  <div class="header-row">
+    <div>
+      <h1>Ajustes</h1>
+      <p class="sub">Configuración del sistema de requisiciones — AMEX Machinery, Grupo Aromata y Liumaq.</p>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <a href="compras.html" target="_blank">← Panel de Compras</a>
+      <a href="index.html" target="_blank">Formulario →</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Código de acceso de Compras</h2>
+    <p class="hint" style="margin-top:0;">Este código es compartido por todo el equipo de Compras para entrar al panel.</p>
+    <div class="row-inline">
+      <div>
+        <label>Código nuevo</label>
+        <input type="password" id="clave-nueva">
+      </div>
+      <div style="flex:0;">
+        <button class="primary" onclick="guardarNuevaClave()">Cambiar</button>
+      </div>
+    </div>
+    <div id="clave-msg"></div>
+  </div>
+
+  <div class="card">
+    <h2>Mi NIP de Ajustes</h2>
+    <p class="hint" style="margin-top:0;">Este NIP es personal, solo para entrar a esta página de Ajustes.</p>
+    <div class="row-inline">
+      <div>
+        <label>NIP actual</label>
+        <input type="password" id="nip-actual">
+      </div>
+      <div>
+        <label>NIP nuevo</label>
+        <input type="password" id="nip-nuevo">
+      </div>
+      <div style="flex:0;">
+        <button class="primary" onclick="guardarNuevoNip()">Cambiar</button>
+      </div>
+    </div>
+    <div id="nip-msg"></div>
+  </div>
+
+  <div class="card">
+    <h2>Usuarios registrados</h2>
+    <p class="hint" style="margin-top:0;">Quien solicita requisiciones se registra desde el formulario. Aquí puedes desactivar una cuenta (no se borra, para no perder el historial) o restablecerle la contraseña.</p>
+    <div id="personas-wrap"><div class="empty">Cargando…</div></div>
+  </div>
+
+  <div class="card">
+    <h2>Historial reciente (todas las empresas)</h2>
+    <p class="hint" style="margin-top:0;">Últimos cambios de estatus/notas hechos desde el panel de Compras, con quién los hizo.</p>
+    <div id="historial-wrap"><div class="empty">Cargando…</div></div>
+  </div>
+
+  <div class="card">
+    <h2>Respaldo de datos</h2>
+    <p class="hint" style="margin-top:0;">Descarga un archivo con todas las requisiciones, usuarios, contadores de folio e historial hasta este momento. No incluye el código de acceso ni contraseñas, por seguridad.</p>
+    <button class="secondary" onclick="descargarRespaldo()">Descargar respaldo (JSON)</button>
+    <div id="respaldo-msg"></div>
+  </div>
+
+</div>
+
+<script>
+const SUPABASE_URL = "https://ygpaqyvgauljvtitlsmr.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlncGFxeXZnYXVsanZ0aXRsc21yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcwNzI4NjAsImV4cCI6MjEwMjY0ODg2MH0.FwPmbulUEOdDs9QUdyGmvcaHUJWgBLy-CkU6cqqqxwM";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let clave = null;
+
+function escapeHtml(s){
+  return String(s == null ? "" : s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function mostrarGateTab(tab){
+  document.getElementById("gate-tab-cuenta").classList.toggle("active", tab === "cuenta");
+  document.getElementById("gate-tab-nip").classList.toggle("active", tab === "nip");
+  document.getElementById("gate-tab-cuenta").style.color = tab === "cuenta" ? "var(--accent-dark)" : "var(--muted)";
+  document.getElementById("gate-tab-cuenta").style.borderBottomColor = tab === "cuenta" ? "var(--accent)" : "transparent";
+  document.getElementById("gate-tab-nip").style.color = tab === "nip" ? "var(--accent-dark)" : "var(--muted)";
+  document.getElementById("gate-tab-nip").style.borderBottomColor = tab === "nip" ? "var(--accent)" : "transparent";
+  document.getElementById("gate-panel-cuenta").style.display = tab === "cuenta" ? "block" : "none";
+  document.getElementById("gate-panel-nip").style.display = tab === "nip" ? "block" : "none";
+}
+function entrarConNipValido(val){
+  clave = val;
+  sessionStorage.setItem("amex_ajustes_nip", val);
+  document.getElementById("gate-overlay").classList.add("hidden");
+  document.getElementById("app-root").style.display = "block";
+  cargarPersonas();
+  cargarHistorialGlobal();
+}
+async function forzarCambioPasswordSiNecesario(p, passwordUsada){
+  if(!p.debe_cambiar_password) return true;
+  alert("Por seguridad, antes de continuar tienes que poner una contraseña nueva (la que te dieron es temporal).");
+  while(true){
+    const nueva = prompt("Escribe tu nueva contraseña (mínimo 4 caracteres):");
+    if(nueva === null){ alert("Tienes que cambiar tu contraseña para poder entrar."); continue; }
+    if(nueva.length < 4){ alert("Mínimo 4 caracteres."); continue; }
+    try{
+      const { error } = await sb.rpc("cambiar_password_propia", { p_persona_id: p.id, p_password_actual: passwordUsada, p_password_nueva: nueva });
+      if(error) throw error;
+      alert("Contraseña actualizada. Ya puedes usar tu cuenta normalmente.");
+      return true;
+    }catch(e){
+      alert("No se pudo cambiar: " + e.message);
+    }
+  }
+}
+async function entrarConCuenta(){
+  const usuario = document.getElementById("gate-cuenta-usuario").value.trim();
+  const password = document.getElementById("gate-cuenta-password").value;
+  const err = document.getElementById("gate-cuenta-error");
+  if(!usuario || !password){ err.textContent = "Escribe tu usuario y contraseña."; err.style.display = "block"; return; }
+  err.style.display = "none";
+  try{
+    const { data: persona, error: errLogin } = await sb.rpc("iniciar_sesion", { p_usuario: usuario, p_password: password });
+    if(errLogin) throw errLogin;
+    const p = Array.isArray(persona) ? persona[0] : persona;
+    if(!p) throw new Error("Usuario o contraseña incorrectos");
+    await forzarCambioPasswordSiNecesario(p, password);
+    const { data: nipAdmin, error: errAcceso } = await sb.rpc("acceso_admin", { p_persona_id: p.id, p_tipo: "ajustes" });
+    if(errAcceso) throw errAcceso;
+    if(!nipAdmin){
+      err.textContent = "Tu cuenta no tiene acceso a Ajustes. Usa la pestaña de NIP.";
+      err.style.display = "block";
+      return;
+    }
+    entrarConNipValido(nipAdmin);
+  }catch(e){
+    err.textContent = e.message.includes("incorrectos") ? "Usuario o contraseña incorrectos." : "Error: " + e.message;
+    err.style.display = "block";
+  }
+}
+async function entrarAjustes(){
+  const val = document.getElementById("gate-clave").value.trim();
+  const err = document.getElementById("gate-error");
+  if(!val){ err.textContent = "Escribe tu NIP."; err.style.display="block"; return; }
+  try{
+    const { data, error } = await sb.rpc("verificar_clave_ajustes", { p_clave: val });
+    if(error) throw error;
+    if(!data){ err.textContent = "NIP incorrecto."; err.style.display = "block"; return; }
+    entrarConNipValido(val);
+  }catch(e){
+    err.textContent = "Error de conexión: " + e.message;
+    err.style.display = "block";
+  }
+}
+
+async function guardarNuevaClave(){
+  const nueva = document.getElementById("clave-nueva").value.trim();
+  const msg = document.getElementById("clave-msg");
+  msg.innerHTML = "";
+  if(!nueva || nueva.length < 4){
+    msg.innerHTML = '<div class="msg-err">El código nuevo debe tener al menos 4 caracteres.</div>';
+    return;
+  }
+  try{
+    const { error } = await sb.rpc("cambiar_clave_compras", { p_clave_actual: clave, p_clave_nueva: nueva });
+    if(error) throw error;
+    document.getElementById("clave-nueva").value = "";
+    msg.innerHTML = '<div class="msg-ok">Código de Compras actualizado.</div>';
+  }catch(e){
+    msg.innerHTML = '<div class="msg-err">No se pudo cambiar: ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+async function guardarNuevoNip(){
+  const actual = document.getElementById("nip-actual").value.trim();
+  const nuevo = document.getElementById("nip-nuevo").value.trim();
+  const msg = document.getElementById("nip-msg");
+  msg.innerHTML = "";
+  if(!nuevo || nuevo.length < 4){
+    msg.innerHTML = '<div class="msg-err">El NIP nuevo debe tener al menos 4 caracteres.</div>';
+    return;
+  }
+  try{
+    const { error } = await sb.rpc("cambiar_clave_ajustes", { p_clave_actual: actual, p_clave_nueva: nuevo });
+    if(error) throw error;
+    clave = nuevo;
+    sessionStorage.setItem("amex_ajustes_nip", nuevo);
+    document.getElementById("nip-actual").value = "";
+    document.getElementById("nip-nuevo").value = "";
+    msg.innerHTML = '<div class="msg-ok">NIP actualizado.</div>';
+  }catch(e){
+    msg.innerHTML = '<div class="msg-err">No se pudo cambiar: ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+let personasCache = [];
+async function cargarPersonas(){
+  const wrap = document.getElementById("personas-wrap");
+  try{
+    const { data, error } = await sb.rpc("listar_personas", { p_clave: clave });
+    if(error) throw error;
+    personasCache = data || [];
+    if(personasCache.length === 0){
+      wrap.innerHTML = '<div class="empty">Todavía no hay usuarios registrados.</div>';
+      return;
+    }
+    wrap.innerHTML = `<table>
+      <thead><tr><th>Nombre</th><th>Usuario</th><th>Puesto</th><th>Rol</th><th>Estatus</th><th>Registrado</th><th></th></tr></thead>
+      <tbody>${personasCache.map(p => `<tr id="persona-row-${p.id}">
+        <td>${escapeHtml(p.nombre)}</td>
+        <td>${escapeHtml(p.usuario) || "—"}</td>
+        <td>${escapeHtml(p.puesto) || "—"}</td>
+        <td><span class="badge ${p.rol === 'admin' ? 'activo' : ''}" style="${p.rol === 'admin' ? '' : 'background:var(--accent-soft);color:var(--accent-dark);'}">${p.rol === 'admin' ? 'Admin (Compras+Ajustes)' : 'Solicitante'}</span></td>
+        <td><span class="badge ${p.activo ? "activo" : "inactivo"}">${p.activo ? "Activo" : "Desactivado"}</span></td>
+        <td>${new Date(p.created_at).toLocaleDateString("es-MX")}</td>
+        <td class="actions-cell">
+          <button class="ghost" onclick="editarPersona('${p.id}')">Editar</button>
+          <button class="ghost" onclick="toggleActivo('${p.id}', ${!p.activo})">${p.activo ? "Desactivar" : "Activar"}</button>
+          <button class="ghost" onclick="resetearPassword('${p.id}', '${escapeHtml(p.nombre)}')">Restablecer contraseña</button>
+          <button class="ghost" style="color:var(--danger);border-color:var(--danger);" onclick="borrarPersona('${p.id}', '${escapeHtml(p.nombre)}')">Borrar</button>
+        </td>
+      </tr>`).join("")}</tbody>
+    </table>`;
+  }catch(e){
+    wrap.innerHTML = '<div class="empty">No se pudo cargar: ' + escapeHtml(e.message) + '</div>';
+  }
+}
+async function borrarPersona(id, nombre){
+  if(!confirm("¿Borrar definitivamente a " + nombre + "?\n\nEsto no se puede deshacer. Si tiene requisiciones en el historial, no se podrá borrar (desactívala en ese caso).")) return;
+  try{
+    const { error } = await sb.rpc("eliminar_persona", { p_clave: clave, p_persona_id: id });
+    if(error) throw error;
+    cargarPersonas();
+  }catch(e){
+    alert("No se pudo borrar: " + e.message);
+  }
+}
+async function editarPersona(id){
+  const p = personasCache.find(x => x.id === id);
+  if(!p) return;
+  const nombre = prompt("Nombre completo:", p.nombre);
+  if(nombre === null) return;
+  const usuario = prompt("Usuario (para iniciar sesión):", p.usuario || "");
+  if(usuario === null) return;
+  const puesto = prompt("Puesto / departamento:", p.puesto || "");
+  if(puesto === null) return;
+  const esAdmin = confirm("¿Esta persona debe tener acceso de Admin (entra directo a Compras y Ajustes con su cuenta)?\n\nAceptar = Admin. Cancelar = Solicitante normal.");
+  try{
+    const { error } = await sb.rpc("editar_persona", {
+      p_clave: clave, p_persona_id: id, p_nombre: nombre, p_usuario: usuario, p_puesto: puesto,
+      p_rol: esAdmin ? "admin" : "solicitante"
+    });
+    if(error) throw error;
+    cargarPersonas();
+  }catch(e){
+    alert("No se pudo guardar: " + e.message);
+  }
+}
+
+async function toggleActivo(id, nuevoActivo){
+  if(!confirm(nuevoActivo ? "¿Reactivar esta cuenta?" : "¿Desactivar esta cuenta? La persona ya no podrá iniciar sesión, pero su historial se conserva.")) return;
+  try{
+    const { error } = await sb.rpc("set_persona_activo", { p_clave: clave, p_persona_id: id, p_activo: nuevoActivo });
+    if(error) throw error;
+    cargarPersonas();
+  }catch(e){
+    alert("No se pudo actualizar: " + e.message);
+  }
+}
+
+async function resetearPassword(id, nombre){
+  const nueva = prompt("Nueva contraseña para " + nombre + " (mínimo 4 caracteres):");
+  if(!nueva) return;
+  if(nueva.length < 4){ alert("Mínimo 4 caracteres."); return; }
+  try{
+    const { error } = await sb.rpc("resetear_password_persona", { p_clave: clave, p_persona_id: id, p_password_nueva: nueva });
+    if(error) throw error;
+    alert("Contraseña restablecida. Avísale a " + nombre + " la nueva contraseña por un canal seguro.");
+  }catch(e){
+    alert("No se pudo restablecer: " + e.message);
+  }
+}
+
+async function cargarHistorialGlobal(){
+  const wrap = document.getElementById("historial-wrap");
+  try{
+    const { data, error } = await sb.rpc("historial_global", { p_clave: clave, p_limite: 100 });
+    if(error) throw error;
+    if(!data || data.length === 0){
+      wrap.innerHTML = '<div class="empty">Sin cambios registrados todavía.</div>';
+      return;
+    }
+    wrap.innerHTML = `<table>
+      <thead><tr><th>Fecha</th><th>Folio</th><th>Empresa</th><th>Estatus</th><th>Por</th></tr></thead>
+      <tbody>${data.map(h => `<tr>
+        <td>${new Date(h.cambiado_en).toLocaleString("es-MX")}</td>
+        <td>${escapeHtml(h.folio)}</td>
+        <td>${escapeHtml(h.empresa)}</td>
+        <td>${escapeHtml(h.estatus_nuevo)}${h.estatus_anterior && h.estatus_anterior !== h.estatus_nuevo ? ` <span class="hint" style="margin:0;">(antes: ${escapeHtml(h.estatus_anterior)})</span>` : ""}</td>
+        <td>${escapeHtml(h.actualizado_por) || "—"}</td>
+      </tr>`).join("")}</tbody>
+    </table>`;
+  }catch(e){
+    wrap.innerHTML = '<div class="empty">No se pudo cargar: ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+async function descargarRespaldo(){
+  const msg = document.getElementById("respaldo-msg");
+  msg.innerHTML = '<div class="hint">Generando…</div>';
+  try{
+    const { data, error } = await sb.rpc("respaldo_completo", { p_clave: clave });
+    if(error) throw error;
+    const blob = new Blob([JSON.stringify(data, null, 2)], {type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const d = new Date();
+    a.href = url;
+    a.download = "respaldo_requisiciones_" + d.getFullYear() + String(d.getMonth()+1).padStart(2,"0") + String(d.getDate()).padStart(2,"0") + ".json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    msg.innerHTML = '<div class="msg-ok">Descargado.</div>';
+  }catch(e){
+    msg.innerHTML = '<div class="msg-err">No se pudo generar: ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+// init: si ya se validó el NIP en esta pestaña, entra directo
+const nipGuardado = sessionStorage.getItem("amex_ajustes_nip");
+if(nipGuardado){
+  document.getElementById("gate-clave").value = nipGuardado;
+  entrarAjustes();
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Requisiciones - Sistema Interno</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root{
+    --accent:#1b3a6b;
+    --accent-dark:#122a4d;
+    --accent-soft:#eef2f8;
+    --ink:#1c1f26;
+    --muted:#6b7280;
+    --border:#d8dde3;
+    --bg:#f4f6f9;
+    --card:#ffffff;
+    --danger:#c0392b;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--ink);
+  }
+  .app{max-width:980px;margin:0 auto;padding:28px 20px 60px;}
+
+  /* Company switcher */
+  .company-bar{
+    display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;
+  }
+  .company-btn{
+    flex:1;min-width:150px;
+    display:flex;align-items:center;justify-content:center;gap:10px;
+    background:var(--card);
+    border:2px solid var(--border);
+    border-radius:var(--radius);
+    padding:12px 14px;
+    cursor:pointer;
+    transition:.15s;
+  }
+  .company-btn img{height:28px;object-fit:contain;}
+  .company-btn.active{
+    border-color:var(--accent);
+    background:var(--accent-soft);
+    box-shadow:0 0 0 3px rgba(0,0,0,0.03);
+  }
+  .company-btn:hover{border-color:var(--accent);}
+
+  .letterhead{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:22px 26px;
+    display:flex;align-items:center;justify-content:space-between;
+    margin-bottom:18px;
+    border-top:5px solid var(--accent);
+  }
+  .letterhead img{height:52px;object-fit:contain;}
+  .letterhead .title{text-align:right;}
+  .letterhead .title h1{margin:0;font-size:22px;color:var(--accent-dark);}
+  .letterhead .title p{margin:2px 0 0;color:var(--muted);font-size:13px;}
+
+  .card{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:20px 22px;
+    margin-bottom:18px;
+  }
+  .card h2{
+    margin:0 0 14px;font-size:15px;letter-spacing:.02em;
+    color:var(--accent-dark);text-transform:uppercase;
+  }
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
+  .grid .span2{grid-column:span 2;}
+  .grid .span4{grid-column:span 4;}
+  @media (max-width:700px){ .grid{grid-template-columns:repeat(2,1fr);} .grid .span2, .grid .span4{grid-column:span 2;} }
+
+  label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:600;}
+  input[type=text],input[type=date],input[type=number],select,textarea{
+    width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:7px;
+    font-size:14px;font-family:inherit;background:#fff;color:var(--ink);
+  }
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:1px;}
+  textarea{resize:vertical;min-height:56px;}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  th{
+    background:var(--accent);color:#fff;text-align:left;
+    padding:9px 8px;font-size:12px;text-transform:uppercase;letter-spacing:.02em;
+  }
+  td{padding:7px 8px;border-bottom:1px solid var(--border);vertical-align:middle;}
+  td input{padding:6px 8px;font-size:13.5px;}
+  .col-num{width:34px;text-align:center;color:var(--muted);}
+  .col-cant{width:70px;}
+  .col-price{width:120px;}
+  .col-import{width:120px;}
+  .col-del{width:36px;text-align:center;}
+  .del-btn{
+    background:none;border:none;color:var(--danger);cursor:pointer;font-size:16px;
+    line-height:1;padding:2px 6px;border-radius:5px;
+  }
+  .del-btn:hover{background:#fdecea;}
+  .import-cell{text-align:right;font-weight:600;}
+
+  .add-row{
+    margin-top:10px;background:none;border:1.5px dashed var(--accent);color:var(--accent-dark);
+    padding:8px 14px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:600;
+  }
+  .add-row:hover{background:var(--accent-soft);}
+
+  .totals{display:flex;justify-content:flex-end;margin-top:12px;}
+  .totals .box{min-width:220px;}
+  .totals .row{display:flex;justify-content:space-between;padding:4px 0;font-size:14px;}
+  .totals .row.total{font-weight:700;font-size:16px;border-top:2px solid var(--ink);margin-top:4px;padding-top:8px;color:var(--accent-dark);}
+
+  .sign-grid{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:10px;}
+  .sign-line{border-bottom:1px solid var(--ink);height:40px;margin-bottom:6px;}
+  .sign-label{font-size:12px;color:var(--muted);}
+
+  .actions{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0;}
+  button.primary,button.secondary,button.ghost{
+    padding:11px 18px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;border:none;
+  }
+  button.primary{background:var(--accent);color:#fff;}
+  button.primary:hover{background:var(--accent-dark);}
+  button.secondary{background:#fff;border:1.5px solid var(--border);color:var(--ink);}
+  button.secondary:hover{border-color:var(--accent);}
+  button.ghost{background:none;border:1.5px solid var(--border);color:var(--muted);}
+
+  .hint{font-size:12px;color:var(--muted);margin-top:-6px;margin-bottom:14px;}
+
+  .history{display:none;}
+  .history.open{display:block;}
+  .history table td, .history table th{font-size:13px;}
+  .hist-empty{color:var(--muted);font-size:13px;padding:10px 0;}
+  .hist-btn{
+    background:var(--accent-soft);border:1px solid var(--border);color:var(--accent-dark);
+    padding:5px 10px;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;
+  }
+  .badge{
+    display:inline-block;background:var(--accent-soft);color:var(--accent-dark);
+    border-radius:5px;padding:2px 8px;font-size:11px;font-weight:700;
+  }
+
+  #print-sheet{display:none;}
+  .ps-value{font-size:14px;padding:4px 0 8px;border-bottom:1px solid var(--border);min-height:18px;word-break:break-word;white-space:pre-wrap;}
+  .ps-motivo{font-size:13px;line-height:1.5;}
+
+  @media print{
+    body{background:#fff;}
+    .app{max-width:100%;padding:0;}
+    .app > *:not(#print-sheet){display:none !important;}
+    #print-sheet{display:block !important;}
+    #print-sheet .card{border:none;padding:0;margin-bottom:14px;}
+    #print-sheet .letterhead{border:none;border-bottom:3px solid var(--accent);border-radius:0;padding:0 0 14px;}
+    #print-sheet table{font-size:12px;}
+    #print-sheet th{background:#eee !important;color:#000 !important;}
+  }
+
+  .id-overlay{
+    position:fixed;inset:0;background:rgba(15,20,30,0.55);
+    display:flex;align-items:center;justify-content:center;
+    z-index:1000;padding:20px;
+  }
+  .id-overlay.hidden{display:none;}
+  .id-box{
+    background:#fff;border-radius:var(--radius);padding:26px 26px 22px;
+    max-width:380px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.25);
+  }
+  .id-box input{
+    width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;
+    font-size:14px;background:#fff;color:var(--ink);
+  }
+  .id-box label{margin-top:2px;display:block;font-size:12px;color:var(--muted);font-weight:600;}
+  .id-tabs{display:flex;gap:6px;margin-bottom:16px;border-bottom:1px solid var(--border);}
+  .id-tab{flex:1;background:none;border:none;padding:8px 4px 10px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;}
+  .id-tab.active{color:var(--accent-dark);border-bottom-color:var(--accent);}
+  .topbar{display:flex;justify-content:flex-end;gap:10px;margin-bottom:6px;}
+  .topbar a, .topbar span{font-size:12.5px;color:var(--muted);}
+  .topbar a{color:var(--accent);text-decoration:none;font-weight:600;}
+  .topbar button.link{background:none;border:none;color:var(--muted);font-size:12.5px;cursor:pointer;text-decoration:underline;padding:0;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="topbar no-print">
+    <span id="quien-eres"></span>
+    <button class="link" onclick="cambiarPersona()">cambiar</button>
+    <a href="compras.html" target="_blank">Panel de Compras →</a>
+  </div>
+
+  <div class="company-bar no-print">
+    <button class="company-btn active" data-company="amex" onclick="selectCompany('amex')">
+      <img src="logos/amex.png">
+    </button>
+    <button class="company-btn" data-company="aromata" onclick="selectCompany('aromata')">
+      <img src="logos/aromata.png">
+    </button>
+    <button class="company-btn" data-company="liumaq" onclick="selectCompany('liumaq')">
+      <img src="logos/liumaq.png">
+    </button>
+  </div>
+
+  <div class="letterhead">
+    <img id="letterhead-logo" src="logos/amex.png">
+    <div class="title">
+      <h1>Solicitud de Compra</h1>
+      <p id="letterhead-sub">AMEX Machinery — Sistema interno de requisiciones</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Datos de la solicitud</h2>
+    <div class="grid">
+      <div>
+        <label>Folio</label>
+        <input type="text" id="f-folio">
+      </div>
+      <div>
+        <label>Fecha</label>
+        <input type="date" id="f-fecha">
+      </div>
+      <div>
+        <label>Departamento</label>
+        <input type="text" id="f-depto" placeholder="Ej. Sistemas">
+      </div>
+      <div>
+        <label>Fecha requerida</label>
+        <input type="date" id="f-requerida">
+      </div>
+      <div class="span2">
+        <label>Solicita</label>
+        <input type="text" id="f-solicita" placeholder="Nombre de quien solicita">
+      </div>
+      <div class="span2">
+        <label>Autoriza</label>
+        <input type="text" id="f-autoriza" placeholder="Nombre de quien autoriza">
+      </div>
+      <div class="span4">
+        <label>Motivo / justificación</label>
+        <textarea id="f-motivo" placeholder="Para qué se necesita esta compra"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Artículos</h2>
+    <table id="items-table">
+      <thead>
+        <tr>
+          <th class="col-num">#</th>
+          <th>Descripción</th>
+          <th>Proveedor</th>
+          <th class="col-cant">Cant.</th>
+          <th class="col-price">Precio unit.</th>
+          <th class="col-import">Importe</th>
+          <th class="col-del no-print"></th>
+        </tr>
+      </thead>
+      <tbody id="items-body"></tbody>
+    </table>
+    <button class="add-row no-print" onclick="addItemRow()">+ Agregar artículo</button>
+
+    <div class="totals">
+      <div class="box">
+        <div class="row"><span>Subtotal</span><span id="t-subtotal">$0.00</span></div>
+        <div class="row no-print" style="padding-top:8px;">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--ink);">
+            <input type="checkbox" id="f-iva" onchange="recalcTotals()" style="width:auto;margin:0;">
+            Agregar IVA (16%)
+          </label>
+        </div>
+        <div class="row" id="iva-row" style="display:none;"><span>IVA (16%)</span><span id="t-iva">$0.00</span></div>
+        <div class="row total"><span id="t-total-label">Total estimado</span><span id="t-total">$0.00</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="sign-grid">
+      <div>
+        <div class="sign-line"></div>
+        <div class="sign-label" id="sign-solicita">Solicita</div>
+      </div>
+      <div>
+        <div class="sign-line"></div>
+        <div class="sign-label" id="sign-autoriza">Autoriza</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="actions no-print">
+    <button class="primary" id="btn-guardar" onclick="guardarEHistorial()">Enviar a Compras</button>
+    <button class="secondary" onclick="imprimir()">Imprimir / Guardar como PDF</button>
+    <button class="ghost" onclick="nuevaRequisicion()">Nueva requisición</button>
+    <button class="ghost" id="history-toggle-btn" onclick="toggleHistory()">Ver mis requisiciones</button>
+    <button class="ghost" onclick="exportarHistorialCSV()">Exportar mis requisiciones (Excel)</button>
+  </div>
+
+  <p class="hint no-print">Al enviar, la requisición queda guardada en la base de datos compartida y Paco (Compras) la ve de inmediato en su panel. Guarda también el PDF si necesitas el comprobante firmado.</p>
+
+  <div class="card history no-print" id="history-panel">
+    <h2>Mis requisiciones (más recientes)</h2>
+    <div id="history-list"><div class="hist-empty">Cargando...</div></div>
+  </div>
+
+  <div id="print-sheet"></div>
+
+</div>
+
+<div id="id-overlay" class="id-overlay no-print">
+  <div class="id-box">
+    <div class="id-tabs">
+      <button type="button" class="id-tab active" id="tab-login" onclick="mostrarTab('login')">Iniciar sesión</button>
+      <button type="button" class="id-tab" id="tab-registro" onclick="mostrarTab('registro')">Crear cuenta</button>
+    </div>
+
+    <div id="panel-login">
+      <p class="hint" style="margin-bottom:14px;">Entra con tu usuario y contraseña.</p>
+      <label>Usuario</label>
+      <input type="text" id="login-usuario" autocomplete="username" placeholder="Ej. jperez">
+      <label style="margin-top:10px;">Contraseña</label>
+      <input type="password" id="login-password" autocomplete="current-password" placeholder="••••••">
+      <div id="login-error" style="color:var(--danger);font-size:12.5px;margin-top:8px;display:none;"></div>
+      <button class="primary" style="margin-top:16px;width:100%;" onclick="iniciarSesion()">Entrar</button>
+    </div>
+
+    <div id="panel-registro" style="display:none;">
+      <p class="hint" style="margin-bottom:14px;">Crea tu cuenta. Se usa una sola vez por persona — luego solo inicias sesión.</p>
+      <label>Nombre completo</label>
+      <input type="text" id="reg-nombre" placeholder="Ej. Juan Pérez">
+      <label style="margin-top:10px;">Puesto / departamento</label>
+      <input type="text" id="reg-puesto" placeholder="Ej. Almacén, Sistemas, Ventas...">
+      <label style="margin-top:10px;">Elige un usuario</label>
+      <input type="text" id="reg-usuario" autocomplete="username" placeholder="Ej. jperez">
+      <label style="margin-top:10px;">Elige una contraseña</label>
+      <input type="password" id="reg-password" autocomplete="new-password" placeholder="Mínimo 4 caracteres">
+      <div id="reg-error" style="color:var(--danger);font-size:12.5px;margin-top:8px;display:none;"></div>
+      <button class="primary" style="margin-top:16px;width:100%;" onclick="registrarPersona()">Crear cuenta y continuar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const COMPANIES = {
+  amex: {
+    name: "AMEX Machinery",
+    sub: "AMEX Machinery — Sistema interno de requisiciones",
+    logo: "logos/amex.png",
+    accent: "#1b3a6b",
+    accentDark: "#122a4d",
+    accentSoft: "#eef2f8",
+    prefix: "AMEX"
+  },
+  aromata: {
+    name: "Grupo Aromata",
+    sub: "Grupo Aromata — Sistema interno de requisiciones",
+    logo: "logos/aromata.png",
+    accent: "#2b2b3d",
+    accentDark: "#17171f",
+    accentSoft: "#eeeef1",
+    prefix: "ARO"
+  },
+  liumaq: {
+    name: "Liumaq",
+    sub: "Liumaq — Sistema interno de requisiciones",
+    logo: "logos/liumaq.png",
+    accent: "#1b3a6b",
+    accentDark: "#0f2647",
+    accentSoft: "#eaf0fa",
+    prefix: "LIU"
+  }
+};
+
+const SUPABASE_URL = "https://ygpaqyvgauljvtitlsmr.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlncGFxeXZnYXVsanZ0aXRsc21yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcwNzI4NjAsImV4cCI6MjEwMjY0ODg2MH0.FwPmbulUEOdDs9QUdyGmvcaHUJWgBLy-CkU6cqqqxwM";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let currentCompany = "amex";
+let itemCounter = 0;
+let history = [];
+let persona = null; // {id, nombre, puesto}
+
+const CSV_HEADERS = ["Empresa","Folio","Fecha","Fecha requerida","Departamento","Solicita","Autoriza","Motivo","No. de artículos","Subtotal","IVA","Incluye IVA","Total","Estatus"];
+
+function csvRowValues(h){
+  const c = COMPANIES[h.empresa];
+  return [c.name, h.folio, h.fecha, h.fecha_requerida, h.depto, h.solicita, h.autoriza, h.motivo,
+    (h.items||[]).length, money(h.subtotal), money(h.iva_monto), h.iva ? "Sí" : "No", money(h.total), h.estatus];
+}
+
+function getPersona(){
+  try{ return JSON.parse(localStorage.getItem("amex_persona") || "null"); }
+  catch(e){ return null; }
+}
+
+function setPersona(p){
+  localStorage.setItem("amex_persona", JSON.stringify(p));
+  persona = p;
+}
+
+function pintarQuienEres(){
+  const el = document.getElementById("quien-eres");
+  if(persona) el.textContent = persona.nombre + (persona.puesto ? " · " + persona.puesto : "");
+}
+
+function mostrarTab(tab){
+  document.getElementById("tab-login").classList.toggle("active", tab === "login");
+  document.getElementById("tab-registro").classList.toggle("active", tab === "registro");
+  document.getElementById("panel-login").style.display = tab === "login" ? "block" : "none";
+  document.getElementById("panel-registro").style.display = tab === "registro" ? "block" : "none";
+}
+
+function entrarConPersona(p){
+  setPersona(p);
+  if(!document.getElementById("f-solicita").value) document.getElementById("f-solicita").value = persona.nombre;
+  document.getElementById("id-overlay").classList.add("hidden");
+  pintarQuienEres();
+  cargarMisRequisiciones();
+}
+
+async function forzarCambioPasswordSiNecesario(p, passwordUsada){
+  if(!p.debe_cambiar_password) return true;
+  alert("Por seguridad, antes de continuar tienes que poner una contraseña nueva (la que te dieron es temporal).");
+  while(true){
+    const nueva = prompt("Escribe tu nueva contraseña (mínimo 4 caracteres):");
+    if(nueva === null){ alert("Tienes que cambiar tu contraseña para poder entrar."); continue; }
+    if(nueva.length < 4){ alert("Mínimo 4 caracteres."); continue; }
+    try{
+      const { error } = await sb.rpc("cambiar_password_propia", { p_persona_id: p.id, p_password_actual: passwordUsada, p_password_nueva: nueva });
+      if(error) throw error;
+      alert("Contraseña actualizada. Ya puedes usar tu cuenta normalmente.");
+      return true;
+    }catch(e){
+      alert("No se pudo cambiar: " + e.message);
+    }
+  }
+}
+async function iniciarSesion(){
+  const usuario = document.getElementById("login-usuario").value.trim();
+  const password = document.getElementById("login-password").value;
+  const err = document.getElementById("login-error");
+  if(!usuario || !password){
+    err.textContent = "Escribe tu usuario y contraseña.";
+    err.style.display = "block";
+    return;
+  }
+  err.style.display = "none";
+  try{
+    const { data, error } = await sb.rpc("iniciar_sesion", { p_usuario: usuario, p_password: password });
+    if(error) throw error;
+    const p = Array.isArray(data) ? data[0] : data;
+    if(!p) throw new Error("Usuario o contraseña incorrectos");
+    await forzarCambioPasswordSiNecesario(p, password);
+    entrarConPersona({ id: p.id, nombre: p.nombre, puesto: p.puesto });
+  }catch(e){
+    err.textContent = e.message.includes("incorrectos") ? "Usuario o contraseña incorrectos." : "Error: " + e.message;
+    err.style.display = "block";
+  }
+}
+
+async function registrarPersona(){
+  const nombre = document.getElementById("reg-nombre").value.trim();
+  const puesto = document.getElementById("reg-puesto").value.trim();
+  const usuario = document.getElementById("reg-usuario").value.trim();
+  const password = document.getElementById("reg-password").value;
+  const err = document.getElementById("reg-error");
+  if(!nombre || !usuario || !password){
+    err.textContent = "Llena nombre, usuario y contraseña para continuar.";
+    err.style.display = "block";
+    return;
+  }
+  err.style.display = "none";
+  try{
+    const { data, error } = await sb.rpc("registrar_persona", { p_usuario: usuario, p_password: password, p_nombre: nombre, p_puesto: puesto });
+    if(error) throw error;
+    const p = Array.isArray(data) ? data[0] : data;
+    entrarConPersona({ id: p.id, nombre: p.nombre, puesto: p.puesto });
+  }catch(e){
+    err.textContent = e.message.includes("ya existe") ? "Ese usuario ya existe, elige otro." : "No se pudo crear la cuenta: " + e.message;
+    err.style.display = "block";
+  }
+}
+
+function cambiarPersona(){
+  localStorage.removeItem("amex_persona");
+  persona = null;
+  document.getElementById("quien-eres").textContent = "";
+  mostrarTab("login");
+  document.getElementById("id-overlay").classList.remove("hidden");
+}
+
+function pad(n){ return n < 10 ? "0"+n : ""+n; }
+
+function todayISO(){
+  const d = new Date();
+  return d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate());
+}
+
+function money(n){
+  n = isNaN(n) ? 0 : n;
+  return "$" + n.toLocaleString("es-MX", {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
+function selectCompany(key){
+  currentCompany = key;
+  const c = COMPANIES[key];
+  document.querySelectorAll(".company-btn").forEach(b=>{
+    b.classList.toggle("active", b.dataset.company === key);
+  });
+  document.getElementById("letterhead-logo").src = c.logo;
+  document.getElementById("letterhead-sub").textContent = c.sub;
+  document.documentElement.style.setProperty("--accent", c.accent);
+  document.documentElement.style.setProperty("--accent-dark", c.accentDark);
+  document.documentElement.style.setProperty("--accent-soft", c.accentSoft);
+  if(!document.getElementById("f-folio").value || document.getElementById("f-folio").dataset.auto === "1"){
+    generarFolio();
+  }
+}
+
+async function generarFolio(){
+  const c = COMPANIES[currentCompany];
+  const el = document.getElementById("f-folio");
+  const empresaKey = currentCompany;
+  const fechaISO = todayISO();
+  el.value = c.prefix + "-…";
+  el.dataset.auto = "1";
+  try{
+    const { data, error } = await sb.rpc("siguiente_folio", { p_empresa: empresaKey, p_fecha: fechaISO });
+    if(error) throw error;
+    if(el.dataset.auto !== "1" || currentCompany !== empresaKey) return; // el usuario ya cambió algo
+    const d = new Date();
+    el.value = c.prefix + "-" + d.getFullYear() + pad(d.getMonth()+1) + pad(d.getDate()) + "-" + pad(data);
+  }catch(e){
+    el.value = c.prefix + "-" + todayISO().replace(/-/g,"") + "-XX";
+  }
+}
+
+function addItemRow(data){
+  data = data || {};
+  itemCounter++;
+  const tbody = document.getElementById("items-body");
+  const tr = document.createElement("tr");
+  tr.dataset.id = itemCounter;
+  tr.innerHTML = `
+    <td class="col-num">${tbody.children.length + 1}</td>
+    <td><input type="text" class="it-desc" value="${data.desc||""}" placeholder="Descripción del artículo"></td>
+    <td><input type="text" class="it-prov" value="${data.prov||""}" placeholder="Proveedor"></td>
+    <td class="col-cant"><input type="number" class="it-cant" value="${data.cant!=null?data.cant:1}" min="0" step="1" oninput="recalcRow(this)"></td>
+    <td class="col-price"><input type="number" class="it-price" value="${data.price!=null?data.price:""}" min="0" step="0.01" placeholder="0.00" oninput="recalcRow(this)"></td>
+    <td class="col-import import-cell"><span class="it-import">$0.00</span></td>
+    <td class="col-del no-print"><button class="del-btn" onclick="delRow(this)">✕</button></td>
+  `;
+  tbody.appendChild(tr);
+  recalcRow(tr.querySelector(".it-cant"));
+}
+
+function delRow(btn){
+  btn.closest("tr").remove();
+  renumberRows();
+  recalcTotals();
+}
+
+function renumberRows(){
+  document.querySelectorAll("#items-body tr").forEach((tr, i)=>{
+    tr.querySelector(".col-num").textContent = i+1;
+  });
+}
+
+function recalcRow(input){
+  const tr = input.closest("tr");
+  const cant = parseFloat(tr.querySelector(".it-cant").value) || 0;
+  const price = parseFloat(tr.querySelector(".it-price").value) || 0;
+  const importe = cant * price;
+  tr.querySelector(".it-import").textContent = money(importe);
+  recalcTotals();
+}
+
+function recalcTotals(){
+  let subtotal = 0;
+  document.querySelectorAll("#items-body tr").forEach(tr=>{
+    const cant = parseFloat(tr.querySelector(".it-cant").value) || 0;
+    const price = parseFloat(tr.querySelector(".it-price").value) || 0;
+    subtotal += cant * price;
+  });
+  const applyIva = document.getElementById("f-iva").checked;
+  const iva = applyIva ? subtotal * 0.16 : 0;
+  const total = subtotal + iva;
+  document.getElementById("t-subtotal").textContent = money(subtotal);
+  document.getElementById("t-iva").textContent = money(iva);
+  document.getElementById("iva-row").style.display = applyIva ? "flex" : "none";
+  document.getElementById("t-total-label").textContent = applyIva ? "Total con IVA" : "Total estimado";
+  document.getElementById("t-total").textContent = money(total);
+}
+
+function readForm(){
+  const items = [];
+  document.querySelectorAll("#items-body tr").forEach(tr=>{
+    items.push({
+      desc: tr.querySelector(".it-desc").value,
+      prov: tr.querySelector(".it-prov").value,
+      cant: tr.querySelector(".it-cant").value,
+      price: tr.querySelector(".it-price").value
+    });
+  });
+  return {
+    company: currentCompany,
+    folio: document.getElementById("f-folio").value,
+    fecha: document.getElementById("f-fecha").value,
+    depto: document.getElementById("f-depto").value,
+    requerida: document.getElementById("f-requerida").value,
+    solicita: document.getElementById("f-solicita").value,
+    autoriza: document.getElementById("f-autoriza").value,
+    motivo: document.getElementById("f-motivo").value,
+    items: items,
+    ivaChecked: document.getElementById("f-iva").checked,
+    subtotal: document.getElementById("t-subtotal").textContent,
+    iva: document.getElementById("t-iva").textContent,
+    total: document.getElementById("t-total").textContent
+  };
+}
+
+function readFormForDB(){
+  const items = [];
+  let subtotal = 0;
+  document.querySelectorAll("#items-body tr").forEach(tr=>{
+    const cant = parseFloat(tr.querySelector(".it-cant").value) || 0;
+    const price = parseFloat(tr.querySelector(".it-price").value) || 0;
+    subtotal += cant * price;
+    items.push({
+      desc: tr.querySelector(".it-desc").value,
+      prov: tr.querySelector(".it-prov").value,
+      cant: cant,
+      price: price
+    });
+  });
+  const ivaChecked = document.getElementById("f-iva").checked;
+  const ivaMonto = ivaChecked ? subtotal * 0.16 : 0;
+  return {
+    empresa: currentCompany,
+    folio: document.getElementById("f-folio").value,
+    fecha: document.getElementById("f-fecha").value,
+    fecha_requerida: document.getElementById("f-requerida").value || null,
+    depto: document.getElementById("f-depto").value,
+    solicita: document.getElementById("f-solicita").value,
+    autoriza: document.getElementById("f-autoriza").value,
+    motivo: document.getElementById("f-motivo").value,
+    items: items,
+    iva: ivaChecked,
+    subtotal: Math.round(subtotal * 100) / 100,
+    iva_monto: Math.round(ivaMonto * 100) / 100,
+    total: Math.round((subtotal + ivaMonto) * 100) / 100,
+    persona_id: persona ? persona.id : null,
+    creado_por: persona ? persona.nombre : null
+  };
+}
+
+function escapeHtml(s){
+  return String(s == null ? "" : s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function buildPrintSheet(){
+  const data = readForm();
+  const c = COMPANIES[data.company];
+  const val = (v) => v ? escapeHtml(v) : "—";
+
+  const itemsRows = data.items.map((it, i) => {
+    const cant = parseFloat(it.cant) || 0;
+    const price = parseFloat(it.price) || 0;
+    const importe = cant * price;
+    return `<tr>
+      <td class="col-num">${i+1}</td>
+      <td>${val(it.desc)}</td>
+      <td>${val(it.prov)}</td>
+      <td class="col-cant" style="text-align:center">${cant}</td>
+      <td class="col-price" style="text-align:right">${money(price)}</td>
+      <td class="col-import import-cell">${money(importe)}</td>
+    </tr>`;
+  }).join("");
+
+  const ivaRowHtml = data.ivaChecked
+    ? `<div class="row"><span>IVA (16%)</span><span>${data.iva}</span></div>`
+    : "";
+
+  document.getElementById("print-sheet").innerHTML = `
+    <div class="letterhead">
+      <img src="${c.logo}" alt="${c.name}">
+      <div class="title">
+        <h1>Solicitud de Compra</h1>
+        <p>${escapeHtml(c.sub)}</p>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Datos de la solicitud</h2>
+      <div class="grid">
+        <div><label>Folio</label><div class="ps-value">${val(data.folio)}</div></div>
+        <div><label>Fecha</label><div class="ps-value">${val(data.fecha)}</div></div>
+        <div><label>Departamento</label><div class="ps-value">${val(data.depto)}</div></div>
+        <div><label>Fecha requerida</label><div class="ps-value">${val(data.requerida)}</div></div>
+        <div class="span2"><label>Solicita</label><div class="ps-value">${val(data.solicita)}</div></div>
+        <div class="span2"><label>Autoriza</label><div class="ps-value">${val(data.autoriza)}</div></div>
+        <div class="span4"><label>Motivo / justificación</label><div class="ps-value ps-motivo">${val(data.motivo)}</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Artículos</h2>
+      <table>
+        <thead><tr>
+          <th class="col-num">#</th><th>Descripción</th><th>Proveedor</th>
+          <th class="col-cant">Cant.</th><th class="col-price">Precio unit.</th><th class="col-import">Importe</th>
+        </tr></thead>
+        <tbody>${itemsRows}</tbody>
+      </table>
+      <div class="totals">
+        <div class="box">
+          <div class="row"><span>Subtotal</span><span>${data.subtotal}</span></div>
+          ${ivaRowHtml}
+          <div class="row total"><span>Total ${data.ivaChecked ? "con IVA" : "estimado"}</span><span>${data.total}</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="sign-grid">
+        <div><div class="sign-line"></div><div class="sign-label">Solicita</div></div>
+        <div><div class="sign-line"></div><div class="sign-label">Autoriza</div></div>
+      </div>
+    </div>
+  `;
+}
+
+function imprimir(){
+  buildPrintSheet();
+  window.print();
+}
+
+function nuevaRequisicion(){
+  document.getElementById("f-depto").value = "";
+  document.getElementById("f-solicita").value = "";
+  document.getElementById("f-autoriza").value = "";
+  document.getElementById("f-motivo").value = "";
+  document.getElementById("f-requerida").value = "";
+  document.getElementById("f-fecha").value = todayISO();
+  document.getElementById("f-iva").checked = false;
+  document.getElementById("items-body").innerHTML = "";
+  generarFolio();
+  addItemRow();
+  addItemRow();
+  addItemRow();
+}
+
+async function guardarEHistorial(){
+  const data = readFormForDB();
+  if(!data.folio){ alert("Ponle un folio a la requisición antes de enviarla."); return; }
+  if(data.items.length === 0 || data.items.every(it=>!it.desc)){
+    if(!confirm("No agregaste artículos con descripción. ¿Enviar de todas formas?")) return;
+  }
+  const btn = document.getElementById("btn-guardar");
+  btn.disabled = true;
+  btn.textContent = "Enviando...";
+  try{
+    const { error } = await sb.from("requisiciones").insert(data);
+    if(error) throw error;
+    document.getElementById("f-folio").dataset.auto = "0";
+    const panel = document.getElementById("history-panel");
+    if(!panel.classList.contains("open")){
+      panel.classList.add("open");
+      document.getElementById("history-toggle-btn").textContent = "Ocultar mis requisiciones";
+    }
+    await cargarMisRequisiciones();
+    alert("Requisición " + data.folio + " enviada a Compras. Paco ya la puede ver en su panel.");
+  }catch(err){
+    alert("No se pudo enviar la requisición: " + err.message + "\nRevisa tu conexión e intenta de nuevo.");
+  }finally{
+    btn.disabled = false;
+    btn.textContent = "Enviar a Compras";
+  }
+}
+
+function renderHistory(){
+  const list = document.getElementById("history-list");
+  if(history.length === 0){
+    list.innerHTML = '<div class="hist-empty">Todavía no has enviado ninguna requisición.</div>';
+    return;
+  }
+  const estatusLabel = { pendiente:"Pendiente", aprobada:"Aprobada", rechazada:"Rechazada", liberacion_pago:"Liberación de pago", en_transito:"En tránsito", en_proceso_importacion:"En proceso de importación", completada:"Completo" };
+  let rows = history.map((h, i)=>{
+    const c = COMPANIES[h.empresa];
+    return `<tr>
+      <td><span class="badge">${c.name}</span></td>
+      <td>${h.folio}</td>
+      <td>${h.fecha||"—"}</td>
+      <td>${estatusLabel[h.estatus]||h.estatus}</td>
+      <td style="text-align:right">${money(h.total)}</td>
+      <td><button class="hist-btn" onclick="cargarHistorial(${i})">Ver / reimprimir</button></td>
+    </tr>${h.comentario_solicitante ? `<tr><td></td><td colspan="5" style="color:var(--muted);font-size:12.5px;padding-top:0;">💬 Compras: "${escapeHtml(h.comentario_solicitante)}"</td></tr>` : ""}`;
+  }).join("");
+  list.innerHTML = `<table>
+    <thead><tr><th>Empresa</th><th>Folio</th><th>Fecha</th><th>Estatus</th><th style="text-align:right">Total</th><th></th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+async function cargarMisRequisiciones(){
+  const list = document.getElementById("history-list");
+  if(!persona){ history = []; renderHistory(); return; }
+  try{
+    const { data, error } = await sb.rpc("mis_requisiciones", { p_persona_id: persona.id });
+    if(error) throw error;
+    history = data || [];
+    renderHistory();
+  }catch(e){
+    list.innerHTML = '<div class="hist-empty">No se pudo cargar el historial (' + e.message + ').</div>';
+  }
+}
+
+function cargarHistorial(i){
+  const data = history[i];
+  selectCompany(data.empresa);
+  document.getElementById("f-folio").value = data.folio;
+  document.getElementById("f-folio").dataset.auto = "0";
+  document.getElementById("f-fecha").value = data.fecha;
+  document.getElementById("f-depto").value = data.depto;
+  document.getElementById("f-requerida").value = data.fecha_requerida || "";
+  document.getElementById("f-solicita").value = data.solicita;
+  document.getElementById("f-autoriza").value = data.autoriza;
+  document.getElementById("f-motivo").value = data.motivo;
+  document.getElementById("f-iva").checked = !!data.iva;
+  document.getElementById("items-body").innerHTML = "";
+  (data.items||[]).forEach(it=>addItemRow(it));
+  recalcTotals();
+  window.scrollTo({top:0, behavior:"smooth"});
+}
+
+function toggleHistory(){
+  const panel = document.getElementById("history-panel");
+  const isOpen = panel.classList.toggle("open");
+  document.getElementById("history-toggle-btn").textContent = isOpen ? "Ocultar mis requisiciones" : "Ver mis requisiciones";
+}
+
+function csvField(v){
+  const s = String(v == null ? "" : v).replace(/"/g, '""');
+  return '"' + s + '"';
+}
+
+function exportarHistorialCSV(){
+  if(history.length === 0){
+    alert("Todavía no has guardado ninguna requisición en esta sesión. Usa \"Guardar en historial\" primero.");
+    return;
+  }
+  const lines = [CSV_HEADERS.map(csvField).join(",")];
+  history.forEach(h=>{
+    lines.push(csvRowValues(h).map(csvField).join(","));
+  });
+  const csv = "﻿" + lines.join("\r\n");
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const d = new Date();
+  a.href = url;
+  a.download = "historial_requisiciones_" + d.getFullYear() + pad(d.getMonth()+1) + pad(d.getDate()) + ".csv";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// init
+document.getElementById("f-fecha").value = todayISO();
+generarFolio();
+addItemRow();
+addItemRow();
+addItemRow();
+window.addEventListener("beforeprint", buildPrintSheet);
+
+persona = getPersona();
+if(persona){
+  pintarQuienEres();
+  if(!document.getElementById("f-solicita").value) document.getElementById("f-solicita").value = persona.nombre;
+  cargarMisRequisiciones();
+}else{
+  document.getElementById("id-overlay").classList.remove("hidden");
+}
+</script>
+</body>
+</html>
