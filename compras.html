@@ -194,6 +194,7 @@ const COMPANIES = {
 const ESTATUS_LABEL = { pendiente:"Pendiente", aprobada:"Aprobada", rechazada:"Rechazada", liberacion_pago:"Liberación de pago", en_transito:"En tránsito", en_proceso_importacion:"En proceso de importación", completada:"Completo" };
 
 let clave = null;
+let adminAjustesClave = null; // solo se llena si entraste con cuenta admin (Luis/Paco) — habilita borrar requisiciones
 let rows = [];
 let debounceTimer = null;
 let visitaAnterior = null; // última vez que Paco abrió el panel, antes de esta sesión
@@ -305,6 +306,10 @@ async function entrarConCuenta(){
       return;
     }
     localStorage.setItem("amex_compras_nombre", p.nombre);
+    try{
+      const { data: nipAjustes } = await sb.rpc("acceso_admin", { p_persona_id: p.id, p_tipo: "ajustes" });
+      adminAjustesClave = nipAjustes || null;
+    }catch(e){ adminAjustesClave = null; }
     entrarConClaveValida(claveAdmin);
   }catch(e){
     err.textContent = e.message.includes("incorrectos") ? "Usuario o contraseña incorrectos." : "Error: " + e.message;
@@ -487,11 +492,25 @@ function verDetalle(id){
     </div>
 
     <div class="modal-actions">
+      ${adminAjustesClave ? `<button class="ghost" style="color:var(--danger);border-color:var(--danger);margin-right:auto;" onclick="borrarRequisicion('${r.id}', '${escapeHtml(r.folio)}')">Borrar requisición</button>` : ""}
       <button class="ghost" onclick="cerrarDetalle()">Cerrar</button>
       <button class="primary" onclick="guardarDetalle('${r.id}')">Guardar cambios</button>
     </div>
   `;
   document.getElementById("detalle-overlay").classList.add("open");
+}
+
+async function borrarRequisicion(id, folio){
+  if(!adminAjustesClave){ alert("Solo Luis o Paco pueden borrar requisiciones. Entra con tu cuenta admin."); return; }
+  if(!confirm("¿Borrar definitivamente la requisición " + folio + "?\n\nEsto no se puede deshacer.")) return;
+  try{
+    const { error } = await sb.rpc("eliminar_requisicion", { p_clave: adminAjustesClave, p_id: id });
+    if(error) throw error;
+    cerrarDetalle();
+    cargar();
+  }catch(e){
+    alert("No se pudo borrar: " + e.message);
+  }
 }
 
 async function verHistorial(id){
