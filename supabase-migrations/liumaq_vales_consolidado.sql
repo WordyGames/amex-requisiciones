@@ -1,0 +1,27 @@
+-- =====================================================================
+-- Migracion: esquema de "liumaq-vales-herramienta" consolidado dentro
+-- de este proyecto de Supabase (amex-requisiciones), bajo el schema
+-- "liumaq_vales". Fecha: 2026-08-31
+--
+-- Motivo: la organizacion "Liumaq" en Supabase tenia 5 proyectos en el
+-- plan gratis (limite: 2 activos). Se decidio dejar activos
+-- permanentemente "nexus-erp" (ERP/CRM completo, 36 tablas) y
+-- "amex-requisiciones" (usado por las 3 empresas, aunque mas por
+-- Liumaq). El esquema de vales de herramienta -- apenas van a empezar
+-- a usarlo, estaba vacio (0 filas, salvo la secuencia de folios que
+-- ya iba en 14) -- se movio aqui como schema separado para no gastar
+-- un tercer slot activo.
+--
+-- Si la app de vales-herramienta se conecta a Supabase:
+--   SUPABASE_URL = el de este proyecto (amex-requisiciones)
+--   Cliente inicializado con { db: { schema: 'liumaq_vales' } }
+--   El folio sigue desde 15 (se preservo el conteo real: iba en 14).
+--
+-- No se encontro el repo/app que consume este proyecto en el
+-- workspace revisado -- si existe en otro lado, hay que actualizar ahi
+-- su SUPABASE_URL y el schema del cliente.
+--
+-- El SQL completo (tablas, vistas, RLS, funciones con sus checks de
+-- autorizacion originales) se aplico directamente via MCP de Supabase
+-- el 2026-08-31. Este archivo documenta el cambio.
+-- =====================================================================
