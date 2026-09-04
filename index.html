@@ -191,6 +191,7 @@
   <div class="topbar no-print">
     <span id="quien-eres"></span>
     <button class="link" onclick="cambiarPersona()">cambiar</button>
+    <a href="recepcion.html" target="_blank">Entrada de material →</a>
     <a href="compras.html" target="_blank">Panel de Compras →</a>
   </div>
 
@@ -385,6 +386,7 @@ let currentCompany = "amex";
 let itemCounter = 0;
 let history = [];
 let persona = null; // {id, nombre, puesto}
+let editingId = null; // si no es null, "Enviar a Compras" en realidad guarda cambios sobre esta requisición existente
 
 const CSV_HEADERS = ["Empresa","Folio","Fecha","Fecha requerida","Departamento","Solicita","Autoriza","Motivo","No. de artículos","Subtotal","IVA","Incluye IVA","Total","Estatus"];
 
@@ -490,6 +492,8 @@ async function registrarPersona(){
 function cambiarPersona(){
   localStorage.removeItem("amex_persona");
   persona = null;
+  editingId = null;
+  document.getElementById("btn-guardar").textContent = "Enviar a Compras";
   document.getElementById("quien-eres").textContent = "";
   mostrarTab("login");
   document.getElementById("id-overlay").classList.remove("hidden");
@@ -739,6 +743,8 @@ function imprimir(){
 }
 
 function nuevaRequisicion(){
+  editingId = null;
+  document.getElementById("btn-guardar").textContent = "Enviar a Compras";
   document.getElementById("f-depto").value = "";
   document.getElementById("f-solicita").value = "";
   document.getElementById("f-autoriza").value = "";
@@ -761,23 +767,48 @@ async function guardarEHistorial(){
   }
   const btn = document.getElementById("btn-guardar");
   btn.disabled = true;
-  btn.textContent = "Enviando...";
+  btn.textContent = editingId ? "Guardando..." : "Enviando...";
   try{
-    const { error } = await sb.from("requisiciones").insert(data);
-    if(error) throw error;
-    document.getElementById("f-folio").dataset.auto = "0";
-    const panel = document.getElementById("history-panel");
-    if(!panel.classList.contains("open")){
-      panel.classList.add("open");
-      document.getElementById("history-toggle-btn").textContent = "Ocultar mis requisiciones";
+    if(editingId){
+      const { error } = await sb.rpc("editar_requisicion_propia", {
+        p_persona_id: persona ? persona.id : null,
+        p_id: editingId,
+        p_folio: data.folio,
+        p_fecha: data.fecha,
+        p_fecha_requerida: data.fecha_requerida,
+        p_depto: data.depto,
+        p_solicita: data.solicita,
+        p_autoriza: data.autoriza,
+        p_motivo: data.motivo,
+        p_items: data.items,
+        p_iva: data.iva,
+        p_subtotal: data.subtotal,
+        p_iva_monto: data.iva_monto,
+        p_total: data.total
+      });
+      if(error) throw error;
+      const folioEditado = data.folio;
+      editingId = null;
+      document.getElementById("f-folio").dataset.auto = "0";
+      await cargarMisRequisiciones();
+      alert("Requisición " + folioEditado + " actualizada.");
+    }else{
+      const { error } = await sb.from("requisiciones").insert(data);
+      if(error) throw error;
+      document.getElementById("f-folio").dataset.auto = "0";
+      const panel = document.getElementById("history-panel");
+      if(!panel.classList.contains("open")){
+        panel.classList.add("open");
+        document.getElementById("history-toggle-btn").textContent = "Ocultar mis requisiciones";
+      }
+      await cargarMisRequisiciones();
+      alert("Requisición " + data.folio + " enviada a Compras. Paco ya la puede ver en su panel.");
     }
-    await cargarMisRequisiciones();
-    alert("Requisición " + data.folio + " enviada a Compras. Paco ya la puede ver en su panel.");
   }catch(err){
-    alert("No se pudo enviar la requisición: " + err.message + "\nRevisa tu conexión e intenta de nuevo.");
+    alert("No se pudo guardar: " + err.message + "\nRevisa tu conexión e intenta de nuevo.");
   }finally{
     btn.disabled = false;
-    btn.textContent = "Enviar a Compras";
+    btn.textContent = editingId ? "Guardar cambios" : "Enviar a Compras";
   }
 }
 
@@ -796,7 +827,10 @@ function renderHistory(){
       <td>${h.fecha||"—"}</td>
       <td>${estatusLabel[h.estatus]||h.estatus}</td>
       <td style="text-align:right">${money(h.total)}</td>
-      <td><button class="hist-btn" onclick="cargarHistorial(${i})">Ver / reimprimir</button></td>
+      <td style="white-space:nowrap;">
+        <button class="hist-btn" onclick="cargarHistorial(${i})">Ver / reimprimir</button>
+        ${h.estatus === "pendiente" ? `<button class="hist-btn" style="margin-left:4px;" onclick="editarRequisicion(${i})">Editar</button>` : ""}
+      </td>
     </tr>${h.comentario_solicitante ? `<tr><td></td><td colspan="5" style="color:var(--muted);font-size:12.5px;padding-top:0;">💬 Compras: "${escapeHtml(h.comentario_solicitante)}"</td></tr>` : ""}`;
   }).join("");
   list.innerHTML = `<table>
@@ -833,6 +867,19 @@ function cargarHistorial(i){
   document.getElementById("items-body").innerHTML = "";
   (data.items||[]).forEach(it=>addItemRow(it));
   recalcTotals();
+  window.scrollTo({top:0, behavior:"smooth"});
+}
+
+function editarRequisicion(i){
+  const data = history[i];
+  if(data.estatus !== "pendiente"){
+    alert("Ya no se puede editar: Compras ya está gestionando esta requisición. Si necesitas un cambio, coméntaselo directamente a Compras.");
+    return;
+  }
+  cargarHistorial(i);
+  editingId = data.id;
+  document.getElementById("f-folio").dataset.auto = "0";
+  document.getElementById("btn-guardar").textContent = "Guardar cambios";
   window.scrollTo({top:0, behavior:"smooth"});
 }
 

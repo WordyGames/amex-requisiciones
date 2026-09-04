@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Entrada de Material - Requisiciones</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root{
+    --accent:#1b3a6b;
+    --accent-dark:#122a4d;
+    --accent-soft:#eef2f8;
+    --ink:#1c1f26;
+    --muted:#6b7280;
+    --border:#d8dde3;
+    --bg:#f4f6f9;
+    --card:#ffffff;
+    --danger:#c0392b;
+    --ok:#1a7a3c;
+    --warn:#a8710a;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);}
+  .app{max-width:900px;margin:0 auto;padding:28px 20px 60px;}
+  h1{font-size:22px;margin:0;color:var(--accent-dark);}
+  h2{font-size:15px;letter-spacing:.02em;color:var(--accent-dark);text-transform:uppercase;margin:0 0 14px;}
+  .sub{color:var(--muted);font-size:13px;margin:2px 0 0;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px 22px;margin-bottom:18px;}
+  .header-row{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:18px;}
+  a{color:var(--accent);text-decoration:none;font-weight:600;font-size:13px;}
+
+  .company-bar{display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;}
+  .company-btn{
+    flex:1;min-width:140px;display:flex;align-items:center;justify-content:center;gap:8px;
+    background:var(--card);border:2px solid var(--border);border-radius:var(--radius);
+    padding:10px 12px;cursor:pointer;transition:.15s;font-size:13px;font-weight:600;color:var(--ink);
+  }
+  .company-btn img{height:22px;object-fit:contain;}
+  .company-btn.active{border-color:var(--accent);background:var(--accent-soft);}
+
+  label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:600;}
+  input[type=text],input[type=number],input[type=password]{
+    width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:7px;
+    font-size:14px;font-family:inherit;background:#fff;color:var(--ink);
+  }
+  input:focus{outline:2px solid var(--accent);outline-offset:1px;}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  th{background:var(--accent);color:#fff;text-align:left;padding:9px 8px;font-size:12px;text-transform:uppercase;letter-spacing:.02em;}
+  td{padding:7px 8px;border-bottom:1px solid var(--border);vertical-align:middle;}
+  td input{padding:6px 8px;font-size:13.5px;}
+  .col-num{width:34px;text-align:center;color:var(--muted);}
+  .col-cant{width:90px;}
+  .col-del{width:36px;text-align:center;}
+  .del-btn{background:none;border:none;color:var(--danger);cursor:pointer;font-size:16px;line-height:1;padding:2px 6px;border-radius:5px;}
+  .del-btn:hover{background:#fdecea;}
+
+  .add-row{margin-top:10px;background:none;border:1.5px dashed var(--accent);color:var(--accent-dark);padding:8px 14px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:600;}
+  .add-row:hover{background:var(--accent-soft);}
+
+  button{font-family:inherit;cursor:pointer;}
+  button.primary,button.secondary,button.ghost{padding:11px 18px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;border:none;}
+  button.primary{background:var(--accent);color:#fff;}
+  button.primary:hover{background:var(--accent-dark);}
+  button.secondary{background:#fff;border:1.5px solid var(--border);color:var(--ink);}
+  button.ghost{background:none;border:1.5px solid var(--border);color:var(--muted);padding:7px 12px;font-size:12.5px;}
+  .actions{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0 0;}
+
+  .hint{font-size:12px;color:var(--muted);margin-top:6px;}
+  .empty{color:var(--muted);font-size:13px;padding:20px;text-align:center;}
+  .badge{display:inline-block;background:var(--accent-soft);color:var(--accent-dark);border-radius:5px;padding:2px 8px;font-size:11px;font-weight:700;}
+  .badge.completa{background:#e3f3e9;color:var(--ok);}
+  .badge.en_proceso{background:#fdf0d5;color:var(--warn);}
+
+  #scan-panel{display:none;}
+  .scan-box{border:2px solid var(--accent);border-radius:var(--radius);background:var(--accent-soft);padding:18px;margin-bottom:16px;transition:.15s;}
+  .scan-box.flash-ok{background:#dff3e6;border-color:var(--ok);}
+  .scan-box.flash-warn{background:#fdf0d5;border-color:var(--warn);}
+  .scan-box.flash-err{background:#fbe4e1;border-color:var(--danger);}
+  #scan-input{font-size:20px;padding:14px 16px;text-align:center;letter-spacing:.02em;}
+  #scan-msg{text-align:center;font-size:13px;font-weight:600;margin-top:10px;min-height:18px;}
+
+  .completa-banner{background:#dff3e6;border:1px solid var(--ok);color:var(--ok);border-radius:var(--radius);padding:14px 16px;margin-bottom:16px;font-weight:700;text-align:center;}
+
+  .item-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);}
+  .item-row:last-child{border-bottom:none;}
+  .item-row .info{display:flex;flex-direction:column;}
+  .item-row .np{font-weight:700;font-size:14px;}
+  .item-row .desc{color:var(--muted);font-size:12px;}
+  .item-row .prog{display:flex;align-items:center;gap:10px;}
+  .item-row .count{font-size:13px;font-weight:600;color:var(--ink);}
+  .check{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0;}
+  .check.ok{background:var(--ok);color:#fff;}
+  .check.pending{background:var(--border);color:var(--muted);}
+  .reset-link{background:none;border:none;color:var(--muted);font-size:11.5px;text-decoration:underline;cursor:pointer;padding:0;}
+
+  .hist-item{border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;}
+  .hist-item .l{font-size:13px;}
+  .hist-item .l b{display:block;font-size:14px;}
+  .hist-item .acts{display:flex;gap:8px;}
+
+  .id-overlay{position:fixed;inset:0;background:rgba(15,20,30,0.55);display:flex;align-items:center;justify-content:center;z-index:1000;padding:20px;}
+  .id-overlay.hidden{display:none;}
+  .id-box{background:#fff;border-radius:var(--radius);padding:26px 26px 22px;max-width:380px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.25);}
+  .id-box input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:#fff;color:var(--ink);}
+  .id-box label{margin-top:2px;display:block;font-size:12px;color:var(--muted);font-weight:600;}
+  .id-tabs{display:flex;gap:6px;margin-bottom:16px;border-bottom:1px solid var(--border);}
+  .id-tab{flex:1;background:none;border:none;padding:8px 4px 10px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;}
+  .id-tab.active{color:var(--accent-dark);border-bottom-color:var(--accent);}
+  .topbar{display:flex;justify-content:flex-end;gap:10px;margin-bottom:6px;flex-wrap:wrap;}
+  .topbar a, .topbar span{font-size:12.5px;color:var(--muted);}
+  .topbar a{color:var(--accent);text-decoration:none;font-weight:600;}
+  .topbar button.link{background:none;border:none;color:var(--muted);font-size:12.5px;cursor:pointer;text-decoration:underline;padding:0;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="topbar no-print">
+    <span id="quien-eres"></span>
+    <button class="link" onclick="cambiarPersona()">cambiar</button>
+    <a href="index.html" target="_blank">← Formulario de requisiciones</a>
+  </div>
+
+  <div class="header-row">
+    <div>
+      <h1>Entrada de Material</h1>
+      <p class="sub">Captura los números de parte que deben llegar y escanéalos con la pistola de código de barras para confirmar la entrada.</p>
+    </div>
+  </div>
+
+  <div id="panel-nueva">
+    <div class="card">
+      <h2>Empresa</h2>
+      <div class="company-bar">
+        <button class="company-btn active" data-company="amex" onclick="selectCompany('amex')">
+          <img src="logos/amex.png">
+        </button>
+        <button class="company-btn" data-company="aromata" onclick="selectCompany('aromata')">
+          <img src="logos/aromata.png">
+        </button>
+        <button class="company-btn" data-company="liumaq" onclick="selectCompany('liumaq')">
+          <img src="logos/liumaq.png">
+        </button>
+      </div>
+
+      <h2>Nueva entrada de material</h2>
+      <label>Referencia (opcional — folio de compra, factura, proveedor...)</label>
+      <input type="text" id="r-referencia" placeholder="Ej. Compra a proveedor X, factura 1234">
+
+      <table id="items-table" style="margin-top:14px;">
+        <thead>
+          <tr>
+            <th class="col-num">#</th>
+            <th>Número de parte</th>
+            <th>Descripción (opcional)</th>
+            <th class="col-cant">Cant. esperada</th>
+            <th class="col-del"></th>
+          </tr>
+        </thead>
+        <tbody id="items-body"></tbody>
+      </table>
+      <button class="add-row" onclick="addItemRow()">+ Agregar número de parte</button>
+
+      <div class="actions">
+        <button class="primary" onclick="crearRecepcion()">Iniciar escaneo</button>
+      </div>
+      <p class="hint">Después de crear la entrada, se abre el modo de escaneo: coloca el cursor en el cuadro y usa la pistola normalmente, como si estuvieras escribiendo con teclado.</p>
+    </div>
+  </div>
+
+  <div id="scan-panel">
+    <div class="card">
+      <div class="header-row" style="margin-bottom:10px;">
+        <div>
+          <h2 style="margin-bottom:2px;" id="scan-titulo">Escaneando</h2>
+          <p class="sub" id="scan-sub"></p>
+        </div>
+        <button class="ghost" onclick="salirDeEscaneo()">← Volver a mis entradas</button>
+      </div>
+
+      <div id="completa-banner" style="display:none;" class="completa-banner">✅ Entrada completa — todo lo esperado ya fue escaneado.</div>
+
+      <div class="scan-box" id="scan-box">
+        <label style="text-align:center;color:var(--accent-dark);">Escanea aquí</label>
+        <input type="text" id="scan-input" placeholder="Esperando escaneo..." autocomplete="off">
+        <div id="scan-msg"></div>
+      </div>
+
+      <div id="scan-items"></div>
+    </div>
+  </div>
+
+  <div class="card" id="panel-historial">
+    <h2>Mis entradas de material</h2>
+    <div id="historial-list"><div class="empty">Cargando...</div></div>
+  </div>
+
+</div>
+
+<div id="id-overlay" class="id-overlay no-print">
+  <div class="id-box">
+    <div class="id-tabs">
+      <button type="button" class="id-tab active" id="tab-login" onclick="mostrarTab('login')">Iniciar sesión</button>
+      <button type="button" class="id-tab" id="tab-registro" onclick="mostrarTab('registro')">Crear cuenta</button>
+    </div>
+
+    <div id="panel-login">
+      <p class="hint" style="margin-bottom:14px;">Entra con tu usuario y contraseña.</p>
+      <label>Usuario</label>
+      <input type="text" id="login-usuario" autocomplete="username" placeholder="Ej. kirman">
+      <label style="margin-top:10px;">Contraseña</label>
+      <input type="password" id="login-password" autocomplete="current-password" placeholder="••••••">
+      <div id="login-error" style="color:var(--danger);font-size:12.5px;margin-top:8px;display:none;"></div>
+      <button class="primary" style="margin-top:16px;width:100%;" onclick="iniciarSesion()">Entrar</button>
+    </div>
+
+    <div id="panel-registro" style="display:none;">
+      <p class="hint" style="margin-bottom:14px;">Crea tu cuenta. Se usa una sola vez por persona — luego solo inicias sesión.</p>
+      <label>Nombre completo</label>
+      <input type="text" id="reg-nombre" placeholder="Ej. Juan Pérez">
+      <label style="margin-top:10px;">Puesto / departamento</label>
+      <input type="text" id="reg-puesto" placeholder="Ej. Almacén, Sistemas, Ventas...">
+      <label style="margin-top:10px;">Elige un usuario</label>
+      <input type="text" id="reg-usuario" autocomplete="username" placeholder="Ej. kirman">
+      <label style="margin-top:10px;">Elige una contraseña</label>
+      <input type="password" id="reg-password" autocomplete="new-password" placeholder="Mínimo 4 caracteres">
+      <div id="reg-error" style="color:var(--danger);font-size:12.5px;margin-top:8px;display:none;"></div>
+      <button class="primary" style="margin-top:16px;width:100%;" onclick="registrarPersona()">Crear cuenta y continuar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const COMPANIES = {
+  amex: { name: "AMEX Machinery", logo: "logos/amex.png" },
+  aromata: { name: "Grupo Aromata", logo: "logos/aromata.png" },
+  liumaq: { name: "Liumaq", logo: "logos/liumaq.png" }
+};
+
+const SUPABASE_URL = "https://ygpaqyvgauljvtitlsmr.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlncGFxeXZnYXVsanZ0aXRsc21yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcwNzI4NjAsImV4cCI6MjEwMjY0ODg2MH0.FwPmbulUEOdDs9QUdyGmvcaHUJWgBLy-CkU6cqqqxwM";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let currentCompany = "amex";
+let itemCounter = 0;
+let persona = null;
+let historial = [];
+let recepcionActiva = null; // {id, empresa, referencia, items, estatus}
+
+function escapeHtml(s){
+  return String(s == null ? "" : s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function getPersona(){
+  try{ return JSON.parse(localStorage.getItem("amex_persona") || "null"); }
+  catch(e){ return null; }
+}
+function setPersona(p){
+  localStorage.setItem("amex_persona", JSON.stringify(p));
+  persona = p;
+}
+function pintarQuienEres(){
+  const el = document.getElementById("quien-eres");
+  if(persona) el.textContent = persona.nombre + (persona.puesto ? " · " + persona.puesto : "");
+}
+function mostrarTab(tab){
+  document.getElementById("tab-login").classList.toggle("active", tab === "login");
+  document.getElementById("tab-registro").classList.toggle("active", tab === "registro");
+  document.getElementById("panel-login").style.display = tab === "login" ? "block" : "none";
+  document.getElementById("panel-registro").style.display = tab === "registro" ? "block" : "none";
+}
+function entrarConPersona(p){
+  setPersona(p);
+  document.getElementById("id-overlay").classList.add("hidden");
+  pintarQuienEres();
+  cargarMisRecepciones();
+}
+async function forzarCambioPasswordSiNecesario(p, passwordUsada){
+  if(!p.debe_cambiar_password) return true;
+  alert("Por seguridad, antes de continuar tienes que poner una contraseña nueva (la que te dieron es temporal).");
+  while(true){
+    const nueva = prompt("Escribe tu nueva contraseña (mínimo 4 caracteres):");
+    if(nueva === null){ alert("Tienes que cambiar tu contraseña para poder entrar."); continue; }
+    if(nueva.length < 4){ alert("Mínimo 4 caracteres."); continue; }
+    try{
+      const { error } = await sb.rpc("cambiar_password_propia", { p_persona_id: p.id, p_password_actual: passwordUsada, p_password_nueva: nueva });
+      if(error) throw error;
+      alert("Contraseña actualizada. Ya puedes usar tu cuenta normalmente.");
+      return true;
+    }catch(e){
+      alert("No se pudo cambiar: " + e.message);
+    }
+  }
+}
+async function iniciarSesion(){
+  const usuario = document.getElementById("login-usuario").value.trim();
+  const password = document.getElementById("login-password").value;
+  const err = document.getElementById("login-error");
+  if(!usuario || !password){ err.textContent = "Escribe tu usuario y contraseña."; err.style.display = "block"; return; }
+  err.style.display = "none";
+  try{
+    const { data, error } = await sb.rpc("iniciar_sesion", { p_usuario: usuario, p_password: password });
+    if(error) throw error;
+    const p = Array.isArray(data) ? data[0] : data;
+    if(!p) throw new Error("Usuario o contraseña incorrectos");
+    await forzarCambioPasswordSiNecesario(p, password);
+    entrarConPersona({ id: p.id, nombre: p.nombre, puesto: p.puesto });
+  }catch(e){
+    err.textContent = e.message.includes("incorrectos") ? "Usuario o contraseña incorrectos." : "Error: " + e.message;
+    err.style.display = "block";
+  }
+}
+async function registrarPersona(){
+  const nombre = document.getElementById("reg-nombre").value.trim();
+  const puesto = document.getElementById("reg-puesto").value.trim();
+  const usuario = document.getElementById("reg-usuario").value.trim();
+  const password = document.getElementById("reg-password").value;
+  const err = document.getElementById("reg-error");
+  if(!nombre || !usuario || !password){
+    err.textContent = "Llena nombre, usuario y contraseña para continuar.";
+    err.style.display = "block";
+    return;
+  }
+  err.style.display = "none";
+  try{
+    const { data, error } = await sb.rpc("registrar_persona", { p_usuario: usuario, p_password: password, p_nombre: nombre, p_puesto: puesto });
+    if(error) throw error;
+    const p = Array.isArray(data) ? data[0] : data;
+    entrarConPersona({ id: p.id, nombre: p.nombre, puesto: p.puesto });
+  }catch(e){
+    err.textContent = e.message.includes("ya existe") ? "Ese usuario ya existe, elige otro." : "No se pudo crear la cuenta: " + e.message;
+    err.style.display = "block";
+  }
+}
+function cambiarPersona(){
+  localStorage.removeItem("amex_persona");
+  persona = null;
+  document.getElementById("quien-eres").textContent = "";
+  mostrarTab("login");
+  document.getElementById("id-overlay").classList.remove("hidden");
+}
+
+function selectCompany(key){
+  currentCompany = key;
+  document.querySelectorAll(".company-btn").forEach(b=>{
+    b.classList.toggle("active", b.dataset.company === key);
+  });
+}
+
+function addItemRow(data){
+  data = data || {};
+  itemCounter++;
+  const tbody = document.getElementById("items-body");
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td class="col-num">${tbody.children.length + 1}</td>
+    <td><input type="text" class="it-np" value="${escapeHtml(data.numero_parte||"")}" placeholder="Ej. RM-4521"></td>
+    <td><input type="text" class="it-desc" value="${escapeHtml(data.descripcion||"")}" placeholder="Opcional"></td>
+    <td class="col-cant"><input type="number" class="it-cant" value="${data.cantidad_esperada!=null?data.cantidad_esperada:1}" min="1" step="1"></td>
+    <td class="col-del"><button class="del-btn" onclick="delRow(this)">✕</button></td>
+  `;
+  tbody.appendChild(tr);
+}
+function delRow(btn){
+  btn.closest("tr").remove();
+  renumberRows();
+}
+function renumberRows(){
+  document.querySelectorAll("#items-body tr").forEach((tr, i)=>{
+    tr.querySelector(".col-num").textContent = i+1;
+  });
+}
+
+async function crearRecepcion(){
+  const referencia = document.getElementById("r-referencia").value;
+  const items = [];
+  document.querySelectorAll("#items-body tr").forEach(tr=>{
+    const numero_parte = tr.querySelector(".it-np").value.trim();
+    if(!numero_parte) return;
+    items.push({
+      numero_parte,
+      descripcion: tr.querySelector(".it-desc").value.trim(),
+      cantidad_esperada: parseInt(tr.querySelector(".it-cant").value, 10) || 1
+    });
+  });
+  if(items.length === 0){ alert("Agrega al menos un número de parte."); return; }
+  if(!persona){ alert("Inicia sesión primero."); return; }
+  try{
+    const { data, error } = await sb.rpc("crear_recepcion", {
+      p_persona_id: persona.id,
+      p_empresa: currentCompany,
+      p_referencia: referencia,
+      p_items: items
+    });
+    if(error) throw error;
+    document.getElementById("r-referencia").value = "";
+    document.getElementById("items-body").innerHTML = "";
+    addItemRow(); addItemRow(); addItemRow();
+    await cargarMisRecepciones();
+    abrirEscaneo(data);
+  }catch(e){
+    alert("No se pudo crear la entrada: " + e.message);
+  }
+}
+
+async function cargarMisRecepciones(){
+  const wrap = document.getElementById("historial-list");
+  if(!persona){ historial = []; renderHistorial(); return; }
+  try{
+    const { data, error } = await sb.rpc("mis_recepciones", { p_persona_id: persona.id });
+    if(error) throw error;
+    historial = data || [];
+    renderHistorial();
+  }catch(e){
+    wrap.innerHTML = '<div class="empty">No se pudo cargar (' + e.message + ').</div>';
+  }
+}
+
+function progresoTexto(items){
+  let recibido = 0, esperado = 0;
+  (items||[]).forEach(it=>{ recibido += Number(it.cantidad_recibida)||0; esperado += Number(it.cantidad_esperada)||0; });
+  return recibido + " / " + esperado + " piezas";
+}
+
+function renderHistorial(){
+  const wrap = document.getElementById("historial-list");
+  if(historial.length === 0){
+    wrap.innerHTML = '<div class="empty">Todavía no has registrado ninguna entrada de material.</div>';
+    return;
+  }
+  wrap.innerHTML = historial.map(h=>{
+    const c = COMPANIES[h.empresa] || { name: h.empresa };
+    return `<div class="hist-item">
+      <div class="l">
+        <b>${escapeHtml(h.referencia) || "(sin referencia)"}</b>
+        <span class="badge">${c.name}</span>
+        <span class="badge ${h.estatus}">${h.estatus === "completa" ? "Completa" : "En proceso"}</span>
+        · ${progresoTexto(h.items)} · ${new Date(h.created_at).toLocaleDateString("es-MX")}
+      </div>
+      <div class="acts">
+        <button class="ghost" onclick="abrirEscaneo('${h.id}')">${h.estatus === "completa" ? "Ver" : "Continuar escaneo"}</button>
+        <button class="ghost" style="color:var(--danger);border-color:var(--danger);" onclick="borrarRecepcionUI('${h.id}')">Borrar</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+async function borrarRecepcionUI(id){
+  if(!confirm("¿Borrar esta entrada de material? Esto no se puede deshacer.")) return;
+  try{
+    const { error } = await sb.rpc("borrar_recepcion", { p_persona_id: persona.id, p_id: id });
+    if(error) throw error;
+    if(recepcionActiva && recepcionActiva.id === id) salirDeEscaneo();
+    await cargarMisRecepciones();
+  }catch(e){
+    alert("No se pudo borrar: " + e.message);
+  }
+}
+
+function abrirEscaneo(id){
+  const h = historial.find(x=>x.id === id);
+  if(!h){ cargarMisRecepciones().then(()=>abrirEscaneo(id)); return; }
+  recepcionActiva = h;
+  document.getElementById("panel-nueva").style.display = "none";
+  document.getElementById("panel-historial").style.display = "none";
+  document.getElementById("scan-panel").style.display = "block";
+  const c = COMPANIES[h.empresa] || { name: h.empresa };
+  document.getElementById("scan-titulo").textContent = h.referencia || "Entrada sin referencia";
+  document.getElementById("scan-sub").textContent = c.name;
+  renderScanItems();
+  const input = document.getElementById("scan-input");
+  input.value = "";
+  input.focus();
+}
+
+function salirDeEscaneo(){
+  recepcionActiva = null;
+  document.getElementById("scan-panel").style.display = "none";
+  document.getElementById("panel-nueva").style.display = "block";
+  document.getElementById("panel-historial").style.display = "block";
+  cargarMisRecepciones();
+}
+
+function renderScanItems(){
+  const wrap = document.getElementById("scan-items");
+  const banner = document.getElementById("completa-banner");
+  const items = recepcionActiva.items || [];
+  banner.style.display = recepcionActiva.estatus === "completa" ? "block" : "none";
+  wrap.innerHTML = items.map(it=>{
+    const ok = Number(it.cantidad_recibida) >= Number(it.cantidad_esperada);
+    return `<div class="item-row">
+      <div class="info">
+        <span class="np">${escapeHtml(it.numero_parte)}</span>
+        ${it.descripcion ? `<span class="desc">${escapeHtml(it.descripcion)}</span>` : ""}
+      </div>
+      <div class="prog">
+        <span class="count">${it.cantidad_recibida} / ${it.cantidad_esperada}</span>
+        ${it.cantidad_recibida > 0 ? `<button class="reset-link" onclick="reiniciarItem('${escapeHtml(it.numero_parte).replace(/'/g,"\\'")}')">reiniciar</button>` : ""}
+        <span class="check ${ok ? "ok" : "pending"}">${ok ? "✓" : "—"}</span>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function sonido(tipo){
+  try{
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const tocar = (freq, dur, delay) => setTimeout(()=>{
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.type = "sine"; o.frequency.value = freq;
+      g.gain.value = 0.08;
+      o.start();
+      setTimeout(()=>{ o.stop(); }, dur);
+    }, delay);
+    if(tipo === "ok"){ tocar(1000, 110, 0); }
+    else if(tipo === "warn"){ tocar(700, 90, 0); tocar(700, 90, 150); }
+    else if(tipo === "err"){ tocar(220, 260, 0); }
+    setTimeout(()=>{ try{ ctx.close(); }catch(e){} }, 700);
+  }catch(e){}
+}
+
+function flashBox(clase, mensaje){
+  const box = document.getElementById("scan-box");
+  box.classList.remove("flash-ok","flash-warn","flash-err");
+  box.classList.add(clase);
+  document.getElementById("scan-msg").textContent = mensaje;
+  setTimeout(()=>{ box.classList.remove(clase); }, 900);
+}
+
+async function procesarEscaneo(){
+  const input = document.getElementById("scan-input");
+  const codigo = input.value.trim();
+  input.value = "";
+  if(!codigo){ input.focus(); return; }
+  try{
+    const { data, error } = await sb.rpc("escanear_recepcion", {
+      p_persona_id: persona.id,
+      p_id: recepcionActiva.id,
+      p_codigo: codigo
+    });
+    if(error) throw error;
+    recepcionActiva.items = data.items;
+    recepcionActiva.estatus = data.estatus;
+    renderScanItems();
+    if(data.excedente){
+      flashBox("flash-warn", "\"" + codigo + "\" ya estaba completo — escaneo extra ignorado.");
+      sonido("warn");
+    }else if(data.estatus === "completa"){
+      flashBox("flash-ok", "✓ " + codigo + " — ¡entrada completa!");
+      sonido("ok");
+    }else{
+      flashBox("flash-ok", "✓ " + codigo + " registrado.");
+      sonido("ok");
+    }
+  }catch(e){
+    flashBox("flash-err", "✕ " + e.message);
+    sonido("err");
+  }finally{
+    input.focus();
+  }
+}
+
+async function reiniciarItem(numeroParte){
+  if(!confirm("¿Reiniciar el conteo de \"" + numeroParte + "\" a cero?")) return;
+  try{
+    const { data, error } = await sb.rpc("reiniciar_item_recepcion", {
+      p_persona_id: persona.id,
+      p_id: recepcionActiva.id,
+      p_numero_parte: numeroParte
+    });
+    if(error) throw error;
+    recepcionActiva.items = data.items;
+    recepcionActiva.estatus = data.estatus;
+    renderScanItems();
+  }catch(e){
+    alert("No se pudo reiniciar: " + e.message);
+  }finally{
+    document.getElementById("scan-input").focus();
+  }
+}
+
+// el lector de código de barras funciona como teclado + tecla Enter al final
+document.addEventListener("DOMContentLoaded", ()=>{
+  const input = document.getElementById("scan-input");
+  input.addEventListener("keydown", (e)=>{
+    if(e.key === "Enter"){
+      e.preventDefault();
+      procesarEscaneo();
+    }
+  });
+  // si el foco se pierde mientras se está escaneando, regresarlo
+  document.getElementById("scan-panel").addEventListener("click", (e)=>{
+    if(e.target.tagName !== "BUTTON") input.focus();
+  });
+});
+
+// init
+addItemRow();
+addItemRow();
+addItemRow();
+
+persona = getPersona();
+if(persona){
+  pintarQuienEres();
+  cargarMisRecepciones();
+}else{
+  document.getElementById("id-overlay").classList.remove("hidden");
+}
+</script>
+</body>
+</html>
