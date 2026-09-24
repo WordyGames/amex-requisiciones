@@ -1,0 +1,110 @@
+/* ============================================================
+   Capa de pulido visual (solo pantalla; la impresion no cambia).
+   Se carga despues de los estilos de cada pagina.
+   ============================================================ */
+@media screen {
+  :root {
+    --accent: #1b3a6b;
+    --accent-dark: #102544;
+    --accent-soft: #edf2fa;
+    --ink: #111827;
+    --muted: #64748b;
+    --border: #e2e8f0;
+    --bg: #f5f7fb;
+    --card: #ffffff;
+    --radius: 14px;
+    --shadow-sm: 0 1px 2px rgba(15, 23, 42, .05);
+    --shadow: 0 1px 3px rgba(15, 23, 42, .06), 0 8px 24px -12px rgba(15, 23, 42, .12);
+    --ring: 0 0 0 3px rgba(27, 58, 107, .18);
+  }
+
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.45;
+  }
+
+  h1, h2, h3 { letter-spacing: -.01em; }
+
+  /* Tarjetas y encabezados */
+  .card, .letterhead, .stat, .modal, .id-box {
+    border-color: var(--border) !important;
+    border-radius: var(--radius) !important;
+    box-shadow: var(--shadow);
+  }
+  .letterhead { border-top-width: 4px !important; }
+  .card h2 { font-size: 13px; letter-spacing: .06em; }
+
+  /* Campos */
+  label { color: var(--muted); letter-spacing: .01em; }
+  input[type=text], input[type=date], input[type=number], input[type=password],
+  input[type=email], input[type=search], select, textarea {
+    border: 1px solid var(--border) !important;
+    border-radius: 10px !important;
+    padding: 10px 12px;
+    min-height: 42px;
+    transition: border-color .15s, box-shadow .15s;
+    background-color: #fff;
+  }
+  td input { min-height: 36px; padding: 7px 9px; }
+  input:focus, select:focus, textarea:focus {
+    outline: none !important;
+    border-color: var(--accent) !important;
+    box-shadow: var(--ring);
+  }
+
+  /* Botones */
+  button, .hist-btn, .company-btn, .id-tab, .add-row {
+    transition: background-color .15s, border-color .15s, box-shadow .15s, transform .05s;
+  }
+  button:active { transform: translateY(1px); }
+  button:focus-visible, a:focus-visible { outline: none; box-shadow: var(--ring); }
+  button.primary, .primary {
+    border-radius: 10px !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, .12);
+    min-height: 42px;
+  }
+  button.secondary, .secondary, button.ghost, .ghost {
+    border-radius: 10px !important;
+    min-height: 42px;
+  }
+  button:disabled { opacity: .55; cursor: not-allowed; }
+
+  .company-btn { border-radius: 12px !important; box-shadow: var(--shadow-sm); }
+  .company-btn.active { box-shadow: var(--ring) !important; }
+
+  /* Tablas: encabezado mas limpio y filas con respiro */
+  table { border-collapse: separate; border-spacing: 0; }
+  th {
+    background: var(--accent-soft) !important;
+    color: var(--accent-dark) !important;
+    font-weight: 700;
+    border-bottom: 1px solid var(--border);
+  }
+  th:first-child { border-top-left-radius: 10px; }
+  th:last-child { border-top-right-radius: 10px; }
+  td { border-bottom: 1px solid var(--border); }
+  tbody tr:hover td { background: #f8fafc; }
+
+  /* Etiquetas de estatus */
+  .badge, .estatus { border-radius: 999px !important; padding: 3px 10px !important; }
+
+  /* Modales */
+  .modal-overlay, .id-overlay { backdrop-filter: blur(3px); background: rgba(15, 23, 42, .45) !important; }
+
+  /* Celular y tablet */
+  @media (max-width: 760px) {
+    .app { padding: 16px 12px 48px !important; }
+    .card, .letterhead { padding: 16px !important; }
+    .letterhead { flex-direction: column; align-items: flex-start !important; gap: 10px; }
+    .letterhead .title { text-align: left !important; }
+    .actions { display: grid !important; grid-template-columns: 1fr 1fr; gap: 8px !important; }
+    .actions button { width: 100%; font-size: 13.5px; padding: 10px 8px; }
+    .actions button.primary { grid-column: 1 / -1; }
+    table { display: block; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; }
+    input, select, textarea { font-size: 16px !important; } /* evita zoom en iPhone */
+  }
+}
