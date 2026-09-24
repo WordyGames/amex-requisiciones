@@ -18,6 +18,12 @@ const APPS = {
     'Estatus: pendiente (sin revisar), aprobada, rechazada, liberacion_pago (en trámite de pago), en_transito (material en camino), en_proceso_importacion (aduana), completada (recibido y cerrado).',
     'Pantallas: index (levantar y ver mis requisiciones), compras.html (panel de Compras con clave), recepcion.html (entrada de material por número de parte), ajustes.html (personas y claves; restablecer contraseñas).',
   ].join('\n'),
+  vales: [
+    'App: Vales de herramienta de LIUMAQ.',
+    'Flujo: el técnico entra con PIN y solicita herramienta del catálogo; un almacenista la aprueba o rechaza (con motivo). El almacenista crea el vale de entrega (técnico, herramienta, cantidad, fecha compromiso, foto) y el técnico confirma con PIN. La devolución se registra en el vale con foto/notas y PIN del técnico.',
+    'Estados: solicitud pendiente, activo/prestado, vencido (pasó la fecha compromiso), devuelto, rechazado. Tablero: Activos, Vencidos, Devueltos, Solicitudes, Valor prestado. Administración: catálogo (manual o Excel), personas y PIN, exportar reporte.',
+  ].join('\n'),
+  generico: 'App interna. Responde solo con base en el texto de la pantalla.',
 }
 
 function sameOrigin(req) {
@@ -42,8 +48,8 @@ module.exports = async function handler(req, res) {
   if (!message) return res.status(400).json({ error: 'Mensaje vacío' })
 
   const brand = BRANDS[body.brand] || BRANDS.amex
-  const app = APPS[body.app] || APPS.requisiciones
-  const context = JSON.stringify(Array.isArray(body.context) ? body.context.slice(0, 150) : []).slice(0, 14000)
+  const app = APPS[body.app] || APPS.generico
+  const context = (typeof body.context === 'string' ? body.context : JSON.stringify(Array.isArray(body.context) ? body.context.slice(0, 150) : [])).slice(0, 14000)
   const history = (Array.isArray(body.history) ? body.history : [])
     .slice(-6)
     .map((m) => ({ role: m && m.role === 'assistant' ? 'assistant' : 'user', content: String((m && m.content) || '').slice(0, 800) }))
