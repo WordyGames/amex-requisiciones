@@ -4,9 +4,9 @@
    ============================================================ */
 @media screen {
   :root {
-    --accent: #1b3a6b;
-    --accent-dark: #102544;
-    --accent-soft: #edf2fa;
+    --accent: #FF5808;
+    --accent-dark: #3D261C;
+    --accent-soft: #FFEFE6;
     --ink: #111827;
     --muted: #64748b;
     --border: #e2e8f0;
@@ -15,12 +15,12 @@
     --radius: 14px;
     --shadow-sm: 0 1px 2px rgba(15, 23, 42, .05);
     --shadow: 0 1px 3px rgba(15, 23, 42, .06), 0 8px 24px -12px rgba(15, 23, 42, .12);
-    --ring: 0 0 0 3px rgba(27, 58, 107, .18);
+    --ring: 0 0 0 3px rgba(255, 88, 8, .2);
   }
 
   html { -webkit-text-size-adjust: 100%; }
   body {
-    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     background: var(--bg);
     color: var(--ink);
     -webkit-font-smoothing: antialiased;
@@ -107,4 +107,24 @@
     table { display: block; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; }
     input, select, textarea { font-size: 16px !important; } /* evita zoom en iPhone */
   }
+}
+
+
+/* ============================================================
+   Identidad AMEX Machinery (amexmachinery.com)
+   Barlow Condensed en titulos, DM Sans en texto, naranja #FF5808,
+   cafe #3D261C, botones con radio 8px. Liumaq/Aromata conservan su
+   color cuando se seleccionan (lo pone selectCompany()).
+   ============================================================ */
+@media screen {
+  h1, h2, h3, .letterhead .title h1, .section-title, .id-tab {
+    font-family: "Barlow Condensed", "DM Sans", sans-serif;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+  }
+  button, .btn, input[type="submit"] { border-radius: 8px; }
+  button.primary { text-transform: uppercase; letter-spacing: .04em; font-weight: 700; }
+  body { color: #353535; }
+  ::selection { background: rgba(255, 88, 8, .22); }
 }
