@@ -54,6 +54,8 @@
         [/(imprimir|pdf|formato)/, 'Desde tu historial abre la requisición y usa **Imprimir**; sale con el membrete de la empresa seleccionada.'],
         [/(contrasena|password|clave|acceso|usuario)/, 'Si olvidaste tu contraseña, pide a un administrador que la restablezca en **Ajustes → Personas**. Al entrar te pedirá cambiarla.'],
       ],
+      hello: 'Pregúntame cómo hacer una requisición, qué significa un estatus o pídeme un resumen de tus requisiciones.',
+      local: function (q, n) { return requisicionesLocal(q, n) },
       collect: function () {
         var list = readGlobal('rows') || readGlobal('history') || []
         if (!Array.isArray(list)) list = []
@@ -63,17 +65,61 @@
       },
     },
   }
-  var CFG = APPS[APP] || APPS.requisiciones
+  function screenSummary() {
+    var lines = pageText().split('\n').map(function (l) { return l.trim() }).filter(function (l) { return l.length > 2 && l.length < 120 })
+    if (!lines.length) return 'No veo contenido en esta pantalla todavía.'
+    return 'Lo principal en pantalla:\n' + lines.slice(0, 12).map(function (l) { return '• ' + l }).join('\n')
+  }
+  var SUMMARY_RULE = [/(resume|resumen|que veo|pantalla)/, screenSummary]
+
+  APPS.vales = {
+    title: 'Vales de herramienta',
+    hello: 'Te explico cómo pedir, entregar y devolver herramienta, y resumo lo que ves en pantalla.',
+    prompts: ['¿Cómo pido una herramienta?', '¿Cómo registro una devolución?', '¿Qué es un vale vencido?', 'Resume lo que veo'],
+    guide: [
+      [/(como|donde).*(pido|pedir|solicit)/, 'Para pedir herramienta (técnico): entra con tu PIN → **Solicitar herramienta**, elige del catálogo, cantidad, área y notas. Un almacenista debe aprobarla antes de que pases por ella.'],
+      [/(como|donde).*(entreg|prest|nuevo vale|hacer un vale)/, 'Para entregar (almacenista): **Nuevo vale** → técnico, herramienta, cantidad, fecha compromiso de devolución y foto opcional. El técnico confirma con su PIN.'],
+      [/(devol|regres)/, 'Para registrar una devolución: abre el vale → **Registrar devolución**, agrega foto y notas si hace falta y el técnico confirma con su PIN. El vale pasa a Devuelto.'],
+      [/(vencid|atrasad|compromiso)/, 'Un vale **vencido** es el que pasó su fecha compromiso de devolución sin regresarse. En el tablero aparecen en la pestaña Vencidos; conviene contactar al técnico.'],
+      [/(aprob|rechaz|autoriz)/, 'Las solicitudes las aprueba o rechaza un almacenista desde el vale ("Revisa disponibilidad y aprueba o rechaza"). Si se rechaza, se registra el motivo.'],
+      [/(pin|contrasena|clave|acceso)/, 'Cada persona entra con un PIN de 4 dígitos. Un almacenista puede cambiarlo en **Administración → personas** (dejar vacío para no cambiar).'],
+      SUMMARY_RULE,
+      [/(catalogo|excel|importar|agregar herramienta)/, 'El catálogo se administra en **Administración**: agrega herramientas manualmente (cantidad, categoría, costo) o impórtalas desde Excel. Desde ahí también se exporta el reporte.'],
+    ],
+    fallback: 'No encontré eso en mi guía. Pregúntame cómo pedir, entregar o devolver herramienta, qué es un vale vencido, o "resume lo que veo".',
+    collect: pageText,
+  }
+  APPS.generico = {
+    title: document.title || 'la aplicación',
+    hello: 'Pregúntame sobre lo que ves en esta pantalla.',
+    prompts: ['Resume lo que veo', '¿Qué puedo hacer aquí?'],
+    guide: [SUMMARY_RULE],
+    fallback: 'Por ahora solo puedo responder con IA sobre lo que ves en pantalla. Intenta de nuevo en un momento.',
+    collect: pageText,
+  }
+  var CFG = APPS[APP] || APPS.generico
 
   // ------------------------------------------------------------ motor local
+  function pageText() {
+    var root = document.querySelector('main') || document.body
+    var clone = root.cloneNode(true)
+    Array.prototype.forEach.call(clone.querySelectorAll('.gb-panel,.gb-btn,script,style,svg'), function (el) { el.remove() })
+    return String(clone.innerText || clone.textContent || '').replace(/\s+\n/g, '\n').replace(/[ \t]+/g, ' ').trim().slice(0, 6000)
+  }
+
   function localReply(q) {
     var n = norm(q)
     for (var i = 0; i < CFG.guide.length; i++) {
       var g = CFG.guide[i]
       if (g[0].test(n)) return typeof g[1] === 'function' ? g[1]() : g[1]
     }
+    if (/^(hola|buenas|que tal|hey)\b/.test(n)) return 'Hola, soy ' + T.name + ', el asistente de ' + T.company + '. ' + CFG.hello
+    if (CFG.local) return CFG.local(q, n)
+    return CFG.fallback
+  }
+
+  function requisicionesLocal(q, n) {
     var data = CFG.collect()
-    if (/^(hola|buenas|que tal|hey)\b/.test(n)) return 'Hola, soy ' + T.name + ', el asistente de ' + T.company + '. Pregúntame cómo hacer una requisición, qué significa un estatus o pídeme un resumen de tus requisiciones.'
     if (!data.length) return 'Todavía no veo requisiciones cargadas en esta pantalla. Inicia sesión o abre tu historial y vuelve a preguntar. También puedo explicarte cómo levantar una requisición o qué significa cada estatus.'
 
     var folio = (q.match(/[A-Za-z]{2,5}-?\s?\d[\w-]*/) || [])[0]
@@ -170,7 +216,7 @@
     b.onclick = function () { ask(p) }
     chips.appendChild(b)
   })
-  add('bot', 'Hola, soy **' + T.name + '**, el asistente de ' + T.company + '. Te ayudo con ' + CFG.title.toLowerCase() + ': cómo hacerlas, estatus y resúmenes de lo que ves en pantalla.')
+  add('bot', 'Hola, soy **' + T.name + '**, el asistente de ' + T.company + '. ' + CFG.hello)
 
   function ask(text) {
     var q = String(text || '').trim()
