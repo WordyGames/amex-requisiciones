@@ -35,7 +35,7 @@ module.exports = async function handler(req, res) {
   if (!sameOrigin(req)) return res.status(403).json({ error: 'Origen no permitido' })
 
   const token = process.env.AI_GATEWAY_API_KEY || req.headers['x-vercel-oidc-token'] || process.env.VERCEL_OIDC_TOKEN
-  if (!token) return res.status(204).end()
+  if (!token) return res.setHeader('x-bot-reason', 'sin-token-ia').status(204).end()
 
   const body = typeof req.body === 'string' ? safeJson(req.body) : req.body || {}
   const message = String(body.message || '').trim().slice(0, 500)
@@ -69,13 +69,18 @@ module.exports = async function handler(req, res) {
       signal: controller.signal,
     })
     clearTimeout(timer)
-    if (!r.ok) return res.status(204).end()
+    if (!r.ok) {
+      const detail = await r.text().catch(() => '')
+      console.warn('AI Gateway', r.status, detail.slice(0, 300))
+      return res.setHeader('x-bot-reason', `gateway-${r.status}`).status(204).end()
+    }
     const j = await r.json()
     const reply = String((j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '').trim()
     if (!reply) return res.status(204).end()
     return res.status(200).json({ reply, mode: 'llm' })
-  } catch {
-    return res.status(204).end()
+  } catch (error) {
+    console.warn('AI Gateway error', error && error.message)
+    return res.setHeader('x-bot-reason', 'gateway-error').status(204).end()
   }
 }
 
