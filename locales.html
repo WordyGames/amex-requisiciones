@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<meta name="theme-color" content="#FF5808">
+<title>Compras Locales - Requisiciones</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root{
+    --accent:#1b3a6b;
+    --accent-dark:#122a4d;
+    --accent-soft:#eef2f8;
+    --ink:#1c1f26;
+    --muted:#6b7280;
+    --border:#d8dde3;
+    --bg:#f4f6f9;
+    --card:#ffffff;
+    --danger:#c0392b;
+    --ok:#1a7a3c;
+    --warn:#a8710a;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);}
+  .app{max-width:1180px;margin:0 auto;padding:28px 20px 60px;}
+  h1{font-size:22px;margin:0;color:var(--accent-dark);}
+  .sub{color:var(--muted);font-size:13px;margin:2px 0 0;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px 22px;margin-bottom:18px;}
+  .header-row{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:18px;}
+  a{color:var(--accent);text-decoration:none;font-weight:600;font-size:13px;}
+
+  .id-overlay{position:fixed;inset:0;background:rgba(15,20,30,0.6);display:flex;align-items:center;justify-content:center;z-index:1000;padding:20px;}
+  .id-overlay.hidden{display:none;}
+  .id-box{background:#fff;border-radius:var(--radius);padding:26px;max-width:360px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.25);}
+  .id-box input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;margin-top:4px;}
+  .id-box label{display:block;font-size:12px;color:var(--muted);font-weight:600;margin-top:12px;}
+  button{font-family:inherit;cursor:pointer;}
+  .primary{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:600;}
+  .secondary{background:var(--accent-soft);color:var(--accent-dark);border:1px solid var(--border);border-radius:8px;padding:9px 14px;font-size:13px;font-weight:600;}
+  .ghost{background:none;border:1px solid var(--border);border-radius:8px;padding:9px 14px;font-size:13px;color:var(--ink);}
+
+  .stats{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px;}
+  .stat{flex:1;min-width:120px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;border-top:4px solid var(--accent);}
+  .stat .n{font-size:24px;font-weight:700;color:var(--accent-dark);}
+  .stat .l{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.02em;}
+
+  .filters{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:14px;}
+  .filters > div{display:flex;flex-direction:column;gap:4px;}
+  .filters label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;}
+  .filters select, .filters input{padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{background:var(--accent-soft);color:var(--accent-dark);text-align:left;padding:9px 10px;font-size:11.5px;text-transform:uppercase;letter-spacing:.02em;}
+  td{padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:top;}
+  tr:hover td{background:#fafbfd;}
+  .badge{display:inline-block;background:var(--accent-soft);color:var(--accent-dark);border-radius:5px;padding:2px 8px;font-size:11px;font-weight:700;}
+  .estatus{display:inline-block;border-radius:5px;padding:3px 9px;font-size:11px;font-weight:700;background:var(--accent-soft);color:var(--accent-dark);}
+  .estatus.pendiente{background:#fdf0d5;color:var(--warn);}
+  .estatus.aprobada{background:#e3f3e9;color:var(--ok);}
+  .estatus.rechazada{background:#fbe4e1;color:var(--danger);}
+  .estatus.en_transito{background:#e6ecf8;color:var(--accent-dark);}
+  .estatus.en_proceso_importacion{background:#eee4fb;color:#5b2a9e;}
+  .estatus.completada{background:#dff3e6;color:var(--ok);}
+  .empty{color:var(--muted);font-size:13px;padding:30px;text-align:center;}
+  .aviso{background:#fdf0d5;border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;margin-bottom:18px;font-size:13px;color:var(--warn);font-weight:600;}
+</style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="ui-polish.css">
+  <script src="bot.js" data-brand="amex" data-app="requisiciones" defer></script>
+</head>
+<body>
+
+<div id="gate-overlay" class="id-overlay">
+  <div class="id-box">
+    <h2 style="margin-top:0;">Compras Locales</h2>
+    <p style="font-size:13px;color:var(--muted);">Acceso con el código compartido de Compras Locales (Kirman / Ricardo).</p>
+    <label>Código de acceso</label>
+    <input type="password" id="gate-clave" placeholder="••••••">
+    <div id="gate-error" style="color:var(--danger);font-size:12.5px;margin-top:8px;display:none;"></div>
+    <button class="primary" style="margin-top:16px;width:100%;" onclick="entrarPanel()">Entrar</button>
+  </div>
+</div>
+
+<div class="app" id="app-root" style="display:none;">
+
+  <div class="header-row">
+    <div>
+      <h1>Compras Locales</h1>
+      <p class="sub">Pedidos de compra local — alimentado desde el Google Sheet que llenan Kirman y Ricardo.</p>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <a href="compras.html">← Panel de Compras</a>
+      <a href="ajustes.html">Ajustes →</a>
+    </div>
+  </div>
+
+  <div id="aviso-wrap"></div>
+  <div class="stats" id="stats"></div>
+
+  <div class="card">
+    <div class="filters">
+      <div>
+        <label>Estatus</label>
+        <select id="f-estatus" onchange="renderTodo()">
+          <option value="">Todos</option>
+        </select>
+      </div>
+      <div>
+        <label>Buscar (folio, descripción, proveedor)</label>
+        <input type="text" id="f-texto" placeholder="Ej. filtro de aceite" oninput="renderTodo()">
+      </div>
+      <div>
+        <button class="ghost" onclick="cargar()">Actualizar</button>
+      </div>
+    </div>
+
+    <div id="tabla-wrap"><div class="empty">Cargando…</div></div>
+  </div>
+
+</div>
+
+<script>
+const SUPABASE_URL = "https://iwnbscekenptumanpjcs.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml3bmJzY2VrZW5wdHVtYW5wamNzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyNzg2OTQsImV4cCI6MjA5NDg1NDY5NH0.7-YjXYAEXmkKGENNAWc99kplFrq7L8fQbPg1M0AhtNQ";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { db: { schema: 'amex_requisiciones' } });
+
+let clave = null;
+let rows = [];
+
+function escapeHtml(s){
+  return String(s == null ? "" : s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+function money(n){
+  n = Number(n) || 0;
+  return "$" + n.toLocaleString("es-MX", {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+function estatusSlug(s){
+  return String(s||"").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\s+/g,"_");
+}
+
+// --- parser de CSV simple (soporta comillas y comas dentro de comillas) ---
+function parseCSV(text){
+  const rows = [];
+  let row = [], field = "", inQuotes = false;
+  for(let i=0;i<text.length;i++){
+    const c = text[i];
+    if(inQuotes){
+      if(c === '"'){
+        if(text[i+1] === '"'){ field += '"'; i++; }
+        else inQuotes = false;
+      }else field += c;
+    }else{
+      if(c === '"') inQuotes = true;
+      else if(c === ','){ row.push(field); field = ""; }
+      else if(c === '\n'){ row.push(field); rows.push(row); row=[]; field=""; }
+      else if(c === '\r'){ /* ignorar */ }
+      else field += c;
+    }
+  }
+  if(field.length || row.length){ row.push(field); rows.push(row); }
+  if(!rows.length) return [];
+  const headers = rows[0].map(h => h.trim());
+  return rows.slice(1).filter(r => r.some(v => String(v).trim() !== "")).map(r=>{
+    const obj = {};
+    headers.forEach((h,i)=> obj[h] = (r[i]||"").trim());
+    return obj;
+  });
+}
+
+async function entrarPanel(){
+  const val = document.getElementById("gate-clave").value.trim();
+  const err = document.getElementById("gate-error");
+  if(!val){ err.textContent = "Escribe el código de acceso."; err.style.display="block"; return; }
+  try{
+    const { data, error } = await sb.rpc("verificar_clave_compras_locales", { p_clave: val });
+    if(error) throw error;
+    if(!data){ err.textContent = "Código incorrecto."; err.style.display = "block"; return; }
+    clave = val;
+    sessionStorage.setItem("amex_locales_clave", val);
+    document.getElementById("gate-overlay").classList.add("hidden");
+    document.getElementById("app-root").style.display = "block";
+    cargar();
+  }catch(e){
+    err.textContent = "Error de conexión: " + e.message;
+    err.style.display = "block";
+  }
+}
+
+async function cargar(){
+  const wrap = document.getElementById("tabla-wrap");
+  const aviso = document.getElementById("aviso-wrap");
+  wrap.innerHTML = '<div class="empty">Cargando…</div>';
+  aviso.innerHTML = "";
+  try{
+    const { data: url, error } = await sb.rpc("obtener_sheet_locales_url", { p_clave: clave });
+    if(error) throw error;
+    if(!url){
+      aviso.innerHTML = '<div class="aviso">Todavía no se ha conectado el Google Sheet de Compras Locales. Pide a Luis que lo configure desde Ajustes.</div>';
+      rows = [];
+      renderTodo();
+      return;
+    }
+    const resp = await fetch(url + (url.includes("?") ? "&" : "?") + "_=" + Date.now());
+    if(!resp.ok) throw new Error("No se pudo leer el Google Sheet (revisa que siga publicado).");
+    const text = await resp.text();
+    rows = parseCSV(text);
+    llenarFiltroEstatus();
+    renderTodo();
+  }catch(e){
+    wrap.innerHTML = '<div class="empty">Error al cargar: ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+function llenarFiltroEstatus(){
+  const sel = document.getElementById("f-estatus");
+  const actuales = new Set(Array.from(sel.options).map(o=>o.value));
+  const vistos = new Set();
+  rows.forEach(r => { if(r.Estatus) vistos.add(r.Estatus); });
+  vistos.forEach(v=>{
+    if(!actuales.has(v)){
+      const opt = document.createElement("option");
+      opt.value = v; opt.textContent = v;
+      sel.appendChild(opt);
+    }
+  });
+}
+
+function filtrar(){
+  const estatus = document.getElementById("f-estatus").value;
+  const texto = document.getElementById("f-texto").value.trim().toLowerCase();
+  return rows.filter(r=>{
+    if(estatus && r.Estatus !== estatus) return false;
+    if(texto){
+      const hay = [r.Folio, r.Descripcion, r.Proveedor, r.Solicita].join(" ").toLowerCase();
+      if(!hay.includes(texto)) return false;
+    }
+    return true;
+  });
+}
+
+function renderTodo(){
+  const list = filtrar();
+  renderStats(list);
+  renderTabla(list);
+}
+
+function renderStats(list){
+  let totalMonto = 0;
+  list.forEach(r=>{
+    const cant = parseFloat(r.Cantidad) || 0;
+    const precio = parseFloat(r["Precio Unitario"]) || 0;
+    totalMonto += cant * precio;
+  });
+  document.getElementById("stats").innerHTML = `
+    <div class="stat"><div class="n">${list.length}</div><div class="l">Pedidos (vista actual)</div></div>
+    <div class="stat"><div class="n">${money(totalMonto)}</div><div class="l">Monto estimado</div></div>
+  `;
+}
+
+function renderTabla(list){
+  const wrap = document.getElementById("tabla-wrap");
+  if(list.length === 0){
+    wrap.innerHTML = '<div class="empty">No hay pedidos con estos filtros.</div>';
+    return;
+  }
+  const rowsHtml = list.map(r=>{
+    const cant = parseFloat(r.Cantidad) || 0;
+    const precio = parseFloat(r["Precio Unitario"]) || 0;
+    const slug = estatusSlug(r.Estatus);
+    return `<tr>
+      <td><span class="badge">${escapeHtml(r.Empresa)||"—"}</span></td>
+      <td>${escapeHtml(r.Folio)||"—"}</td>
+      <td>${escapeHtml(r.Fecha)||"—"}</td>
+      <td>${escapeHtml(r.Solicita)||"—"}</td>
+      <td>${escapeHtml(r.Proveedor)||"—"}</td>
+      <td>${escapeHtml(r.Descripcion)||"—"}</td>
+      <td style="text-align:center">${cant||"—"}</td>
+      <td style="text-align:right">${money(cant*precio)}</td>
+      <td><span class="estatus ${slug}">${escapeHtml(r.Estatus)||"—"}</span></td>
+      <td>${escapeHtml(r.Comentario)||""}</td>
+    </tr>`;
+  }).join("");
+  wrap.innerHTML = `<table>
+    <thead><tr><th>Empresa</th><th>Folio</th><th>Fecha</th><th>Solicita</th><th>Proveedor</th><th>Descripción</th><th>Cant.</th><th style="text-align:right">Importe</th><th>Estatus</th><th>Comentario</th></tr></thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>`;
+}
+
+// init: si ya se validó la clave en esta pestaña, entra directo
+const claveGuardada = sessionStorage.getItem("amex_locales_clave");
+if(claveGuardada){
+  document.getElementById("gate-clave").value = claveGuardada;
+  entrarPanel();
+}
+</script>
+</body>
+</html>

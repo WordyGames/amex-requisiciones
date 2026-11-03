@@ -107,8 +107,10 @@
       <h1>Ajustes</h1>
       <p class="sub">Configuración del sistema de requisiciones — AMEX Machinery, Grupo Aromata y Liumaq.</p>
     </div>
-    <div style="display:flex;gap:10px;align-items:center;">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
       <a href="compras.html">← Panel de Compras</a>
+      <a href="locales.html">Compras Locales →</a>
+      <a href="pedidos.html">Pedidos →</a>
       <a href="index.html">Formulario →</a>
     </div>
   </div>
@@ -126,6 +128,44 @@
       </div>
     </div>
     <div id="clave-msg"></div>
+  </div>
+
+  <div class="card">
+    <h2>Compras Locales y Pedidos</h2>
+    <p class="hint" style="margin-top:0;">Código compartido para Kirman/Ricardo (Compras Locales) y para Luis Fuentes (Pedidos, solo lectura). También aquí conectas el Google Sheet de Compras Locales.</p>
+
+    <div class="row-inline">
+      <div>
+        <label>Código nuevo de Compras Locales (Kirman/Ricardo)</label>
+        <input type="password" id="clave-locales-nueva">
+      </div>
+      <div style="flex:0;">
+        <button class="primary" onclick="guardarClaveLocales()">Cambiar</button>
+      </div>
+    </div>
+    <div id="clave-locales-msg"></div>
+
+    <div class="row-inline" style="margin-top:14px;">
+      <div>
+        <label>Código nuevo de Pedidos (Luis Fuentes)</label>
+        <input type="password" id="clave-pedidos-nueva">
+      </div>
+      <div style="flex:0;">
+        <button class="primary" onclick="guardarClavePedidos()">Cambiar</button>
+      </div>
+    </div>
+    <div id="clave-pedidos-msg"></div>
+
+    <div class="row-inline" style="margin-top:14px;">
+      <div>
+        <label>Link del Google Sheet publicado como CSV (Archivo → Compartir → Publicar en la web → CSV)</label>
+        <input type="text" id="sheet-locales-url" placeholder="https://docs.google.com/spreadsheets/d/.../pub?output=csv">
+      </div>
+      <div style="flex:0;">
+        <button class="primary" onclick="guardarSheetUrl()">Guardar link</button>
+      </div>
+    </div>
+    <div id="sheet-locales-msg"></div>
   </div>
 
   <div class="card">
@@ -272,25 +312,52 @@ async function guardarNuevaClave(){
   }
 }
 
-async function guardarNuevoNip(){
-  const actual = document.getElementById("nip-actual").value.trim();
-  const nuevo = document.getElementById("nip-nuevo").value.trim();
-  const msg = document.getElementById("nip-msg");
+async function guardarClaveLocales(){
+  const nueva = document.getElementById("clave-locales-nueva").value.trim();
+  const msg = document.getElementById("clave-locales-msg");
   msg.innerHTML = "";
-  if(!nuevo || nuevo.length < 4){
-    msg.innerHTML = '<div class="msg-err">El NIP nuevo debe tener al menos 4 caracteres.</div>';
+  if(!nueva || nueva.length < 4){
+    msg.innerHTML = '<div class="msg-err">El código nuevo debe tener al menos 4 caracteres.</div>';
     return;
   }
   try{
-    const { error } = await sb.rpc("cambiar_clave_ajustes", { p_clave_actual: actual, p_clave_nueva: nuevo });
+    const { error } = await sb.rpc("cambiar_clave_compras_locales", { p_clave_actual: clave, p_clave_nueva: nueva });
     if(error) throw error;
-    clave = nuevo;
-    sessionStorage.setItem("amex_ajustes_nip", nuevo);
-    document.getElementById("nip-actual").value = "";
-    document.getElementById("nip-nuevo").value = "";
-    msg.innerHTML = '<div class="msg-ok">NIP actualizado.</div>';
+    document.getElementById("clave-locales-nueva").value = "";
+    msg.innerHTML = '<div class="msg-ok">Código de Compras Locales actualizado.</div>';
   }catch(e){
     msg.innerHTML = '<div class="msg-err">No se pudo cambiar: ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+async function guardarClavePedidos(){
+  const nueva = document.getElementById("clave-pedidos-nueva").value.trim();
+  const msg = document.getElementById("clave-pedidos-msg");
+  msg.innerHTML = "";
+  if(!nueva || nueva.length < 4){
+    msg.innerHTML = '<div class="msg-err">El código nuevo debe tener al menos 4 caracteres.</div>';
+    return;
+  }
+  try{
+    const { error } = await sb.rpc("cambiar_clave_pedidos", { p_clave_actual: clave, p_clave_nueva: nueva });
+    if(error) throw error;
+    document.getElementById("clave-pedidos-nueva").value = "";
+    msg.innerHTML = '<div class="msg-ok">Código de Pedidos actualizado.</div>';
+  }catch(e){
+    msg.innerHTML = '<div class="msg-err">No se pudo cambiar: ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+async function guardarSheetUrl(){
+  const url = document.getElementById("sheet-locales-url").value.trim();
+  const msg = document.getElementById("sheet-locales-msg");
+  msg.innerHTML = "";
+  try{
+    const { error } = await sb.rpc("actualizar_sheet_locales_url", { p_clave_ajustes: clave, p_url: url });
+    if(error) throw error;
+    msg.innerHTML = '<div class="msg-ok">Link del Google Sheet guardado.</div>';
+  }catch(e){
+    msg.innerHTML = '<div class="msg-err">No se pudo guardar: ' + escapeHtml(e.message) + '</div>';
   }
 }
 
