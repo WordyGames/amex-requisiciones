@@ -144,6 +144,18 @@ function estatusSlug(s){
   return String(s||"").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\s+/g,"_");
 }
 
+// Busca un valor en la fila por coincidencia parcial del encabezado (tolera mayúsculas/minúsculas
+// y pequeños cambios de nombre, ej. "Proveedor" vs "Proveedor/DMS" vs "COMENTARIO").
+function campo(row, patrones){
+  const claves = Object.keys(row);
+  for(const patron of patrones){
+    for(const k of claves){
+      if(k.toLowerCase().includes(patron)) return row[k];
+    }
+  }
+  return "";
+}
+
 // --- parser de CSV simple (soporta comillas y comas dentro de comillas) ---
 function parseCSV(text){
   const rows = [];
@@ -221,7 +233,7 @@ function llenarFiltroEstatus(){
   const sel = document.getElementById("f-estatus");
   const actuales = new Set(Array.from(sel.options).map(o=>o.value));
   const vistos = new Set();
-  rows.forEach(r => { if(r.Estatus) vistos.add(r.Estatus); });
+  rows.forEach(r => { const e = campo(r, ["estatus"]); if(e) vistos.add(e); });
   vistos.forEach(v=>{
     if(!actuales.has(v)){
       const opt = document.createElement("option");
@@ -235,9 +247,9 @@ function filtrar(){
   const estatus = document.getElementById("f-estatus").value;
   const texto = document.getElementById("f-texto").value.trim().toLowerCase();
   return rows.filter(r=>{
-    if(estatus && r.Estatus !== estatus) return false;
+    if(estatus && campo(r, ["estatus"]) !== estatus) return false;
     if(texto){
-      const hay = [r.Folio, r.Descripcion, r.Proveedor, r.Solicita].join(" ").toLowerCase();
+      const hay = [campo(r,["folio"]), campo(r,["descripcion"]), campo(r,["proveedor"]), campo(r,["solicita"]), campo(r,["osen"])].join(" ").toLowerCase();
       if(!hay.includes(texto)) return false;
     }
     return true;
@@ -253,8 +265,8 @@ function renderTodo(){
 function renderStats(list){
   let totalMonto = 0;
   list.forEach(r=>{
-    const cant = parseFloat(r.Cantidad) || 0;
-    const precio = parseFloat(r["Precio Unitario"]) || 0;
+    const cant = parseFloat(campo(r,["cantidad"])) || 0;
+    const precio = parseFloat(campo(r,["precio"])) || 0;
     totalMonto += cant * precio;
   });
   document.getElementById("stats").innerHTML = `
@@ -270,24 +282,26 @@ function renderTabla(list){
     return;
   }
   const rowsHtml = list.map(r=>{
-    const cant = parseFloat(r.Cantidad) || 0;
-    const precio = parseFloat(r["Precio Unitario"]) || 0;
-    const slug = estatusSlug(r.Estatus);
+    const cant = parseFloat(campo(r,["cantidad"])) || 0;
+    const precio = parseFloat(campo(r,["precio"])) || 0;
+    const estatus = campo(r,["estatus"]);
+    const slug = estatusSlug(estatus);
     return `<tr>
-      <td><span class="badge">${escapeHtml(r.Empresa)||"—"}</span></td>
-      <td>${escapeHtml(r.Folio)||"—"}</td>
-      <td>${escapeHtml(r.Fecha)||"—"}</td>
-      <td>${escapeHtml(r.Solicita)||"—"}</td>
-      <td>${escapeHtml(r.Proveedor)||"—"}</td>
-      <td>${escapeHtml(r.Descripcion)||"—"}</td>
+      <td><span class="badge">${escapeHtml(campo(r,["empresa"]))||"—"}</span></td>
+      <td>${escapeHtml(campo(r,["folio"]))||"—"}</td>
+      <td>${escapeHtml(campo(r,["fecha"]))||"—"}</td>
+      <td>${escapeHtml(campo(r,["solicita"]))||"—"}</td>
+      <td>${escapeHtml(campo(r,["proveedor"]))||"—"}</td>
+      <td>${escapeHtml(campo(r,["descripcion"]))||"—"}</td>
       <td style="text-align:center">${cant||"—"}</td>
       <td style="text-align:right">${money(cant*precio)}</td>
-      <td><span class="estatus ${slug}">${escapeHtml(r.Estatus)||"—"}</span></td>
-      <td>${escapeHtml(r.Comentario)||""}</td>
+      <td><span class="estatus ${slug}">${escapeHtml(estatus)||"—"}</span></td>
+      <td>${escapeHtml(campo(r,["osen"]))||""}</td>
+      <td>${escapeHtml(campo(r,["comentario"]))||""}</td>
     </tr>`;
   }).join("");
   wrap.innerHTML = `<table>
-    <thead><tr><th>Empresa</th><th>Folio</th><th>Fecha</th><th>Solicita</th><th>Proveedor</th><th>Descripción</th><th>Cant.</th><th style="text-align:right">Importe</th><th>Estatus</th><th>Comentario</th></tr></thead>
+    <thead><tr><th>Empresa</th><th>Folio</th><th>Fecha</th><th>Solicita</th><th>Proveedor/DMS</th><th>Descripción</th><th>Cant.</th><th style="text-align:right">Importe</th><th>Estatus</th><th>OSEN</th><th>Comentario</th></tr></thead>
     <tbody>${rowsHtml}</tbody>
   </table>`;
 }

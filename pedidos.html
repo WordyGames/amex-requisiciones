@@ -150,6 +150,18 @@ function estatusSlug(s){
   return String(s||"").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\s+/g,"_");
 }
 
+// Busca un valor en la fila por coincidencia parcial del encabezado (tolera mayúsculas/minúsculas
+// y pequeños cambios de nombre, ej. "Proveedor" vs "Proveedor/DMS" vs "COMENTARIO").
+function campo(row, patrones){
+  const claves = Object.keys(row);
+  for(const patron of patrones){
+    for(const k of claves){
+      if(k.toLowerCase().includes(patron)) return row[k];
+    }
+  }
+  return "";
+}
+
 function parseCSV(text){
   const rows = [];
   let row = [], field = "", inQuotes = false;
@@ -235,18 +247,22 @@ async function cargar(){
       const text = await resp.text();
       const localRows = parseCSV(text);
       localRows.forEach(r=>{
-        const cant = parseFloat(r.Cantidad) || 0;
-        const precio = parseFloat(r["Precio Unitario"]) || 0;
+        const cant = parseFloat(campo(r,["cantidad"])) || 0;
+        const precio = parseFloat(campo(r,["precio"])) || 0;
+        const proveedor = campo(r,["proveedor"]);
+        const osen = campo(r,["osen"]);
+        let descripcion = (proveedor ? proveedor + " — " : "") + (campo(r,["descripcion"])||"");
+        if(osen) descripcion += " (OSEN " + osen + ")";
         unificado.push({
           origen: "local",
-          empresa: r.Empresa,
-          folio: r.Folio,
-          fecha: r.Fecha,
-          solicita: r.Solicita,
-          descripcion: (r.Proveedor ? r.Proveedor + " — " : "") + (r.Descripcion||""),
+          empresa: campo(r,["empresa"]),
+          folio: campo(r,["folio"]),
+          fecha: campo(r,["fecha"]),
+          solicita: campo(r,["solicita"]),
+          descripcion: descripcion,
           total: cant*precio,
-          estatus: estatusSlug(r.Estatus),
-          estatusLabel: r.Estatus
+          estatus: estatusSlug(campo(r,["estatus"])),
+          estatusLabel: campo(r,["estatus"])
         });
       });
     }
