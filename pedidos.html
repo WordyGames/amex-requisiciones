@@ -69,6 +69,12 @@
   .estatus.completada{background:#dff3e6;color:var(--ok);}
   .empty{color:var(--muted);font-size:13px;padding:30px;text-align:center;}
   .aviso{background:#fdf0d5;border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;margin-bottom:18px;font-size:13px;color:var(--warn);font-weight:600;}
+  .osen-link{background:none;border:none;padding:0;font:inherit;color:var(--accent);font-weight:700;text-decoration:underline;cursor:pointer;}
+  .osen-modal{position:fixed;inset:0;background:rgba(15,20,30,0.55);display:flex;align-items:center;justify-content:center;z-index:1100;padding:20px;}
+  .osen-modal.hidden{display:none;}
+  .osen-modal-box{background:#fff;border-radius:var(--radius);padding:22px 24px;max-width:720px;width:100%;max-height:80vh;overflow:auto;box-shadow:0 10px 40px rgba(0,0,0,.25);}
+  .osen-modal-box h3{margin:0 0 4px;color:var(--accent-dark);}
+  .osen-modal-box .cerrar{float:right;}
 </style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -112,8 +118,14 @@
         </select>
       </div>
       <div>
-        <label>Buscar (folio, descripción, solicita)</label>
-        <input type="text" id="f-texto" placeholder="Ej. filtro o LIU-2026" oninput="renderTodo()">
+        <label>OSEN</label>
+        <select id="f-osen" onchange="renderTodo()">
+          <option value="">Todos</option>
+        </select>
+      </div>
+      <div>
+        <label>Buscar (folio, descripción, solicita, OSEN)</label>
+        <input type="text" id="f-texto" placeholder="Ej. filtro, LIU-2026 u OSEN-2637" oninput="renderTodo()">
       </div>
       <div>
         <button class="secondary" onclick="exportarCSV()">Exportar (Excel)</button>
@@ -126,6 +138,15 @@
     <div id="tabla-wrap"><div class="empty">Cargando…</div></div>
   </div>
 
+</div>
+
+<div class="osen-modal hidden" id="osen-modal">
+  <div class="osen-modal-box">
+    <button class="ghost cerrar" onclick="cerrarOsenModal()">Cerrar</button>
+    <h3 id="osen-modal-titulo">OSEN</h3>
+    <p class="sub" style="margin-bottom:12px;">Todos los pedidos ligados a esta OSEN.</p>
+    <div id="osen-modal-lista"></div>
+  </div>
 </div>
 
 <script>
@@ -148,6 +169,12 @@ function money(n){
 }
 function estatusSlug(s){
   return String(s||"").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\s+/g,"_");
+}
+
+// Extrae el número de OSEN de un texto libre, ej. "SERVICIO OSEN-2637" o "(OSEN 2637)" -> "2637".
+function extraerOsen(texto){
+  const m = String(texto||"").match(/OSEN[\s\-:]*([A-Za-z0-9\-]+)/i);
+  return m ? m[1].replace(/[)\s]+$/,"") : "";
 }
 
 // Busca un valor en la fila por coincidencia parcial del encabezado (tolera mayúsculas/minúsculas
@@ -229,7 +256,8 @@ async function cargar(){
         descripcion: r.motivo,
         total: Number(r.total)||0,
         estatus: r.estatus,
-        estatusLabel: ESTATUS_LABEL[r.estatus] || r.estatus
+        estatusLabel: ESTATUS_LABEL[r.estatus] || r.estatus,
+        osen: extraerOsen(r.motivo)
       });
     });
   }catch(e){
@@ -262,7 +290,8 @@ async function cargar(){
           descripcion: descripcion,
           total: cant*precio,
           estatus: estatusSlug(campo(r,["estatus"])),
-          estatusLabel: campo(r,["estatus"])
+          estatusLabel: campo(r,["estatus"]),
+          osen: osen || ""
         });
       });
     }
@@ -271,20 +300,58 @@ async function cargar(){
   }
 
   unificado.sort((a,b)=> String(b.fecha||"").localeCompare(String(a.fecha||"")));
+  llenarFiltroOsen();
   renderTodo();
+}
+
+function llenarFiltroOsen(){
+  const sel = document.getElementById("f-osen");
+  const actual = sel.value;
+  const osenes = Array.from(new Set(unificado.map(r=>r.osen).filter(Boolean))).sort();
+  sel.innerHTML = '<option value="">Todos</option>' + osenes.map(o=>`<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join("");
+  if(osenes.includes(actual)) sel.value = actual;
 }
 
 function filtrar(){
   const origen = document.getElementById("f-origen").value;
+  const osen = document.getElementById("f-osen").value;
   const texto = document.getElementById("f-texto").value.trim().toLowerCase();
   return unificado.filter(r=>{
     if(origen && r.origen !== origen) return false;
+    if(osen && r.osen !== osen) return false;
     if(texto){
-      const hay = [r.folio, r.descripcion, r.solicita, r.empresa].join(" ").toLowerCase();
+      const hay = [r.folio, r.descripcion, r.solicita, r.empresa, r.osen].join(" ").toLowerCase();
       if(!hay.includes(texto)) return false;
     }
     return true;
   });
+}
+
+function abrirOsen(osen){
+  if(!osen) return;
+  const lista = unificado.filter(r=>r.osen === osen);
+  document.getElementById("osen-modal-titulo").textContent = "OSEN " + osen + " (" + lista.length + " pedido" + (lista.length===1?"":"s") + ")";
+  const rowsHtml = lista.map(r=>{
+    const origenLabel = r.origen === "internacional" ? "Internacional" : "Local";
+    const origenClass = r.origen === "internacional" ? "origen-internacional" : "origen-local";
+    return `<tr>
+      <td><span class="badge ${origenClass}">${origenLabel}</span></td>
+      <td>${escapeHtml(r.empresa)||"—"}</td>
+      <td>${escapeHtml(r.folio)||"—"}</td>
+      <td>${escapeHtml(r.fecha)||"—"}</td>
+      <td>${escapeHtml(r.descripcion)||"—"}</td>
+      <td style="text-align:right">${money(r.total)}</td>
+      <td><span class="estatus ${r.estatus}">${escapeHtml(r.estatusLabel)||"—"}</span></td>
+    </tr>`;
+  }).join("");
+  document.getElementById("osen-modal-lista").innerHTML = `<table>
+    <thead><tr><th>Origen</th><th>Empresa</th><th>Folio</th><th>Fecha</th><th>Descripción</th><th style="text-align:right">Total</th><th>Estatus</th></tr></thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>`;
+  document.getElementById("osen-modal").classList.remove("hidden");
+}
+function cerrarOsenModal(){
+  document.getElementById("osen-modal").classList.add("hidden");
 }
 
 function renderTodo(){
@@ -314,6 +381,9 @@ function renderTabla(list){
   const rowsHtml = list.map(r=>{
     const origenLabel = r.origen === "internacional" ? "Internacional" : "Local";
     const origenClass = r.origen === "internacional" ? "origen-internacional" : "origen-local";
+    const osenCell = r.osen
+      ? `<button class="osen-link" onclick="abrirOsen('${r.osen.replace(/'/g,"\\'")}')">${escapeHtml(r.osen)}</button>`
+      : "—";
     return `<tr>
       <td><span class="badge ${origenClass}">${origenLabel}</span></td>
       <td>${escapeHtml(r.empresa)||"—"}</td>
@@ -323,10 +393,11 @@ function renderTabla(list){
       <td>${escapeHtml(r.descripcion)||"—"}</td>
       <td style="text-align:right">${money(r.total)}</td>
       <td><span class="estatus ${r.estatus}">${escapeHtml(r.estatusLabel)||"—"}</span></td>
+      <td>${osenCell}</td>
     </tr>`;
   }).join("");
   wrap.innerHTML = `<table>
-    <thead><tr><th>Origen</th><th>Empresa</th><th>Folio</th><th>Fecha</th><th>Solicita</th><th>Descripción</th><th style="text-align:right">Total</th><th>Estatus</th></tr></thead>
+    <thead><tr><th>Origen</th><th>Empresa</th><th>Folio</th><th>Fecha</th><th>Solicita</th><th>Descripción</th><th style="text-align:right">Total</th><th>Estatus</th><th>OSEN</th></tr></thead>
     <tbody>${rowsHtml}</tbody>
   </table>`;
 }
@@ -338,12 +409,12 @@ function csvField(v){
 function exportarCSV(){
   const list = filtrar();
   if(list.length === 0){ alert("No hay datos para exportar con estos filtros."); return; }
-  const headers = ["Origen","Empresa","Folio","Fecha","Solicita","Descripción","Total","Estatus"];
+  const headers = ["Origen","Empresa","Folio","Fecha","Solicita","Descripción","Total","Estatus","OSEN"];
   const lines = [headers.map(csvField).join(",")];
   list.forEach(r=>{
     lines.push([
       r.origen === "internacional" ? "Internacional" : "Local",
-      r.empresa, r.folio, r.fecha, r.solicita, r.descripcion, r.total, r.estatusLabel
+      r.empresa, r.folio, r.fecha, r.solicita, r.descripcion, r.total, r.estatusLabel, r.osen
     ].map(csvField).join(","));
   });
   const csv = "﻿" + lines.join("\r\n");
