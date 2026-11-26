@@ -145,6 +145,7 @@ const pendienteRecepcion = s => ["comprado","en_transito","parcial"].includes(s.
 const cantidadPendiente = n => n===1 ? "1 pedido pendiente" : `${n} pedidos pendientes`;
 function menu(){
   const m = [];
+  if(["aprobar","comprar","comprar_local","recibir"].some(tiene)) m.push(["trabajo","Mi trabajo"]);
   if(tiene("solicitar")) m.push(["nueva","+ Nueva solicitud"],["mias","Mis solicitudes"]);
   if(tiene("aprobar")) m.push(["aprobar","Por aprobar", DATA.filter(s=>s.estatus==="por_aprobar").length]);
   if(tiene("comprar")) m.push(["comprar","Por comprar", DATA.filter(s=>s.estatus==="por_comprar").length]);
@@ -173,37 +174,34 @@ async function arrancar(){
   await recargar();
 }
 // ---------- avisos (notificaciones + sonido) ----------
-let PREV = null, audioCtx = null, poll = null, ultimaCarga = null, solicitudCarga = 0;
-let bandeja = {avisos:[], previo:null, sonido:false};
+let audioCtx = null, poll = null, ultimaCarga = null, solicitudCarga = 0;
+let bandeja = {avisos:[], sonido:false};
+let avisosCargados = false, avisosError = false, peticionAvisos = 0;
 const claveBandeja = () => "liumaq_avisos_v2:" + S.nombre;
 function cargarBandeja(){
   try{
     const guardada = JSON.parse(localStorage.getItem(claveBandeja()));
-    if(Array.isArray(guardada?.avisos)) bandeja = guardada;
+    bandeja.sonido = guardada?.sonido === true;
   }catch(e){}
-  if(bandeja.previo) PREV = {pend:new Set(bandeja.previo.pend), est:bandeja.previo.est};
 }
 function guardarBandeja(){
-  try{ localStorage.setItem(claveBandeja(), JSON.stringify(bandeja)); }catch(e){}
+  try{ localStorage.setItem(claveBandeja(), JSON.stringify({sonido:bandeja.sonido})); }catch(e){}
 }
-function abrirAvisos(){
-  bandeja.avisos.forEach(a=>a.leido=true);
-  guardarBandeja();
+async function abrirAvisos(){
+  const leidos = bandeja.avisos.filter(a=>!a.leido).map(a=>a.evento);
+  await sincronizarAvisos(leidos);
   pintarTabs();
   abrirModal(`<h2>Avisos</h2>
     <button class="ghost sm" onclick="alternarSonido()">Sonido ${bandeja.sonido?"activado":"desactivado"}</button>
-    ${bandeja.avisos.length?'<ul>'+bandeja.avisos.map(a=>`<li><button class="ghost sm" onclick="verSolicitud(${Number(a.id)})">${esc(a.texto)}</button></li>`).join("")+'</ul>':'<p class="mut">No hay avisos.</p>'}
+    ${avisosError?'<p class="err">No se pudieron sincronizar los avisos.</p>':""}
+    ${bandeja.avisos.length?'<ul>'+bandeja.avisos.map(a=>`<li><button class="ghost sm" onclick="verSolicitud(${Number(a.id)})">${esc(a.folio)} · ${esc(a.osen)} · ${esc(ESTATUS[a.estatus]||a.estatus)}</button> <span class="mut">${fecha(a.creado)}</span></li>`).join("")+'</ul>':'<p class="mut">No hay avisos.</p>'}
     <button class="ghost sm" onclick="cerrarModal()">Cerrar</button>`);
 }
-function misPendientes(){
-  const ids = new Set();
-  DATA.forEach(s=>{
-    if(tiene("aprobar") && s.estatus==="por_aprobar") ids.add(s.id);
-    if(tiene("comprar") && s.estatus==="por_comprar") ids.add(s.id);
-    else if(tiene("comprar_local") && s.estatus==="por_comprar" && (!s.tipo||s.tipo==="local")) ids.add(s.id);
-    if(tiene("recibir") && pendienteRecepcion(s)) ids.add(s.id);
-  });
-  return ids;
+function accionTrabajo(s){
+  if(s.estatus==="por_aprobar" && tiene("aprobar")) return "aprobar";
+  if(s.estatus==="por_comprar" && (tiene("comprar") || (tiene("comprar_local") && esLocalPendiente(s)))) return "comprar";
+  if(pendienteRecepcion(s) && tiene("recibir")) return "recibir";
+  return "";
 }
 async function alternarSonido(){
   if(bandeja.sonido) bandeja.sonido = false;
@@ -227,24 +225,23 @@ function sonar(){
       o.start(audioCtx.currentTime+t); o.stop(audioCtx.currentTime+t+0.17); });
   }catch(e){}
 }
-function avisar(titulo, solicitudes){
-  const avisos = solicitudes.map(s=>({id:s.id, texto:`${s.folio} · ${s.osen} · ${ESTATUS[s.estatus]}${s.prioridad==="urgente"?" · URGENTE":""}`, leido:false}));
-  bandeja.avisos = [...avisos,...bandeja.avisos].slice(0,100);
-  const cuerpo = avisos.slice(0,3).map(a=>a.texto).join(" · ");
-  if(bandeja.sonido) sonar();
-  aviso(titulo + ": " + cuerpo, true);
-}
-function revisarAvisos(){
-  const pend = misPendientes(), est = Object.fromEntries(DATA.map(s=>[s.id,s.estatus]));
-  if(PREV){
-    const nuevos = DATA.filter(s=>pend.has(s.id) && !PREV.pend.has(s.id));
-    if(nuevos.length) avisar(nuevos.length===1?"Nuevo pendiente":`${nuevos.length} nuevos pendientes`, nuevos);
-    const mios = DATA.filter(s=>s.solicita_nombre===S.nombre && PREV.est[s.id] && PREV.est[s.id]!==s.estatus && !nuevos.includes(s));
-    if(mios.length) avisar("Tu solicitud cambió", mios);
+async function sincronizarAvisos(leidos=[]){
+  const peticion = ++peticionAvisos;
+  try{
+    const avisos = await rpc("avisos_internos",{p_token:S.token,p_leidos:leidos});
+    if(peticion!==peticionAvisos || !S) return;
+    const conocidos = new Set(bandeja.avisos.map(a=>a.evento));
+    const nuevos = avisos.filter(a=>!a.leido && !conocidos.has(a.evento));
+    bandeja.avisos = avisos;
+    if(avisosCargados && !leidos.length && nuevos.length){
+      if(bandeja.sonido) sonar();
+      aviso(nuevos.map(a=>`${a.folio} · ${ESTATUS[a.estatus]||a.estatus}`).slice(0,3).join(" | "),true);
+    }
+    avisosCargados = true;
+    avisosError = false;
+  }catch(e){
+    if(peticion===peticionAvisos) avisosError = true;
   }
-  PREV = {pend, est};
-  bandeja.previo = {pend:[...pend], est};
-  guardarBandeja();
 }
 function estadoCarga(error){
   const estado = $("sync");
@@ -268,8 +265,8 @@ async function cargarDatos(){
     TC = tipoCambio;
     ultimaCarga = new Date();
     estadoCarga(false);
-    revisarAvisos();
-    return true;
+    await sincronizarAvisos();
+    return numero===solicitudCarga && Boolean(S);
   }catch(e){
     if(numero!==solicitudCarga) return false;
     estadoCarga(true);
@@ -296,7 +293,7 @@ function render(){
   pintarTabs();
   const filtros = Object.fromEntries([...$("v-app").querySelectorAll('[id^="f-"]')]
     .map(campo=>[campo.id,campo.value]));
-  const v = {nueva:vNueva, mias:vMias, aprobar:vAprobar, comprar:vComprar, local:vLocal, recibir:vRecibir, osen:vOsen, admin:vAdmin}[vista];
+  const v = {trabajo:vTrabajo, nueva:vNueva, mias:vMias, aprobar:vAprobar, comprar:vComprar, local:vLocal, recibir:vRecibir, osen:vOsen, admin:vAdmin}[vista];
   $("v-app").innerHTML = v ? v() : '<div class="empty">Sin opciones para tu usuario.</div>';
   if(vista==="nueva") filaPartida();
   if(vista==="admin") adminCargar();
@@ -353,18 +350,23 @@ function filtroBar(id){
 }
 function aplicaFiltro(list, id){
   const t = ($("f-"+id)?.value||"").toLowerCase().trim();
+  const plazo = id==="trabajo" ? $("f-trabajo-plazo")?.value : "";
+  if(plazo) list = list.filter(s=>plazo==="urgente" ? s.prioridad==="urgente" :
+    plazo==="sin_fecha" ? !s.fecha_requerida : s.fecha_requerida && s.fecha_requerida < hoyMexico());
   if(!t) return list;
   return list.filter(s => [s.folio,s.osen,s.proveedor,s.solicita_nombre,s.empresa, ...(s.partidas||[]).map(p=>p.descripcion+" "+(p.no_parte||""))].join(" ").toLowerCase().includes(t));
 }
 const LISTAS = {};
 function tablaLista(id, list, acciones){
-  if(["aprobar","comprar","local","recibir"].includes(id)){
+  if(["trabajo","aprobar","comprar","local","recibir"].includes(id)){
     list = [...list].sort((a,b)=>Number(b.prioridad==="urgente")-Number(a.prioridad==="urgente")
       || String(a.fecha_requerida||"9999").localeCompare(String(b.fecha_requerida||"9999"))
       || String(a.created_at).localeCompare(String(b.created_at)));
   }
   LISTAS[id] = {list, acciones};
-  return filtroBar(id) + `<div class="tbl" id="t-${id}">${tablaHTML(list, acciones)}</div>`;
+  const plazo = id==="trabajo" ? `<p><label for="f-trabajo-plazo">Plazo y prioridad</label>
+    <select id="f-trabajo-plazo" onchange="render2('trabajo')"><option value="">Todos</option><option value="urgente">Urgentes</option><option value="vencido">Vencidos</option><option value="sin_fecha">Sin fecha</option></select></p>` : "";
+  return filtroBar(id) + plazo + `<div class="tbl" id="t-${id}">${tablaHTML(list, acciones)}</div>`;
 }
 function render2(id){ const L = LISTAS[id]; $("t-"+id).innerHTML = tablaHTML(aplicaFiltro(L.list,id), L.acciones); }
 function tablaHTML(list, acciones){
@@ -377,11 +379,31 @@ function tablaHTML(list, acciones){
     <td>${(s.partidas||[]).slice(0,2).map(p=>esc(p.descripcion)+(vista==="recibir"?` · Faltan ${Math.max(0,Number(p.cantidad)-Number(p.cantidad_recibida||0))}`:"")).join(", ")}${(s.partidas||[]).length>2?` +${s.partidas.length-2}`:""}</td>
     <td>${esc(s.proveedor||"—")}${s.tipo?`<div class="mut">${esc(s.tipo)}</div>`:""}</td>
     <td style="text-align:right;white-space:nowrap">${money(s.total_mxn)}<div class="mut">${money(s.total_usd,"USD")}</div></td>
-    <td>${pill(s.estatus)}</td>
+    <td>${pill(s.estatus)}${vista==="trabajo" && s.etapa_desde?`<div class="mut">${tiempoEnEtapa(s.etapa_desde)}</div>`:""}</td>
     <td style="white-space:nowrap">${acciones?acciones(s):""}</td></tr>`).join("")}</tbody></table>`;
 }
 
 // ---------- vistas ----------
+function hoyMexico(){
+  const partes = new Intl.DateTimeFormat("es-MX",{timeZone:"America/Mexico_City",year:"numeric",month:"2-digit",day:"2-digit"})
+    .formatToParts(new Date());
+  const fecha = Object.fromEntries(partes.map(p=>[p.type,p.value]));
+  return `${fecha.year}-${fecha.month}-${fecha.day}`;
+}
+function tiempoEnEtapa(inicio){
+  const dias = Math.max(0,Math.floor((Date.now()-Date.parse(inicio))/86400000));
+  return dias===0 ? "Menos de un día en esta etapa" : dias===1 ? "1 día en esta etapa" : `${dias} días en esta etapa`;
+}
+function vTrabajo(){
+  const pendientes = DATA.filter(accionTrabajo);
+  return `<div class="card"><h2>Mi trabajo</h2><p class="mut">${cantidadPendiente(pendientes.length)}</p>
+    ${tablaLista("trabajo",pendientes,s=>{
+      const accion = accionTrabajo(s);
+      const acciones = {aprobar:["Revisar","verSolicitud"], comprar:["Comprar","compraUI"], recibir:["Recibir","recibirUI"]};
+      const [texto,fn] = acciones[accion];
+      return `<button class="btn sm" onclick="${fn}(${Number(s.id)})">${texto}</button>`;
+    })}</div>`;
+}
 function vMias(){
   const mias = S.permisos.includes("admin") ? DATA : DATA.filter(s=>s.solicita_nombre===S.nombre);
   return `<div class="card"><h2>Mis solicitudes</h2>${tablaLista("mias", mias)}</div>`;
@@ -395,7 +417,7 @@ async function aprobar(id, ok){
   const c = prompt(ok ? "Comentario (opcional):" : "Motivo del rechazo:");
   if(c===null) return;
   if(!ok && !c.trim()){ aviso("Indica el motivo del rechazo."); return; }
-  try{ await rpc("aprobar_solicitud",{p_token:S.token,p_id:id,p_ok:ok,p_comentario:c}); await recargar(); aviso(ok?"Aprobada.":"Rechazada.", true); }
+  try{ await rpc("aprobar_solicitud",{p_token:S.token,p_id:id,p_ok:ok,p_comentario:c}); cerrarModal(); await recargar(); aviso(ok?"Aprobada.":"Rechazada.", true); }
   catch(e){ aviso(e.message); }
 }
 function vComprar(){
@@ -484,14 +506,24 @@ function osenHTML(f){
   <td>${r.rec===r.n?pill("recibido"):r.n===1?pill(r.l[0].estatus):`<span class="p">${r.rec} de ${r.n} recibidos</span>`}</td></tr>`).join("")}</tbody></table>`;
 }
 function detalleSol(s){
+  const responsable = s.estatus==="por_aprobar" ? "Aprobación" : s.estatus==="por_comprar" ?
+    (s.tipo==="local" ? "Compras locales" : "Compras") : pendienteRecepcion(s) ? "Almacén" : "";
+  const accion = accionTrabajo(s);
+  const botones = {
+    aprobar:`<button class="btn sm" onclick="aprobar(${Number(s.id)},true)">Aprobar</button> <button class="ghost sm bad" onclick="aprobar(${Number(s.id)},false)">Rechazar</button>`,
+    comprar:`<button class="btn sm" onclick="compraUI(${Number(s.id)})">Comprar</button>`,
+    recibir:`<button class="btn sm" onclick="recibirUI(${Number(s.id)})">Recibir</button>`
+  };
   return `<h3>${esc(s.folio)} · ${pill(s.estatus)}${s.prioridad==="urgente"?' <span class="p urg">URGENTE</span>':""}</h3>
+  ${responsable?`<p><b>Siguiente acción</b> · ${responsable} · ${botones[accion]||""}</p>`:""}
+  <p class="mut">Último movimiento ${fecha(s.updated_at||s.created_at)} · Requerida ${fecha(s.fecha_requerida)}${responsable && s.fecha_requerida && s.fecha_requerida<hoyMexico()?" · Vencida":""}${responsable && s.etapa_desde?` · ${tiempoEnEtapa(s.etapa_desde)}`:""}</p>
   <p class="mut">${esc(s.empresa)} · Solicitó <b>${esc(s.solicita_nombre||"—")}</b> el ${fecha(s.created_at)}
    ${s.comprador_nombre?` · Compró <b>${esc(s.comprador_nombre)}</b>`:""} · Proveedor: <b>${esc(s.proveedor||"—")}</b>${s.tipo?` (${esc(s.tipo)})`:""}
    ${s.aprobado_por?` · ${s.estatus==="rechazada"?"Rechazó":"Aprobó"} ${esc(s.aprobado_por)}${s.comentario_aprobacion?`: "${esc(s.comentario_aprobacion)}"`:""}`:""}
    ${s.fecha_requerida?` · Requerida: ${fecha(s.fecha_requerida)}`:""} · TC ${esc(s.tc||"—")}</p>
-  <div class="tbl"><table><thead><tr><th>Descripción</th><th>No. parte</th><th>Cant.</th><th>Recibido</th><th>Precio</th><th style="text-align:right">Importe</th></tr></thead><tbody>
+  <div class="tbl"><table><thead><tr><th>Descripción</th><th>No. parte</th><th>Cant.</th><th>Recibido</th><th>Falta</th><th>Precio</th><th style="text-align:right">Importe</th></tr></thead><tbody>
   ${s.partidas.map(p=>`<tr><td>${esc(p.descripcion)}</td><td>${esc(p.no_parte||"")}</td><td>${p.cantidad}</td><td>${p.cantidad_recibida}</td>
-   <td>${money(p.precio,p.moneda)}</td><td style="text-align:right">${money(p.cantidad*p.precio,p.moneda)}</td></tr>`).join("")}</tbody></table></div>
+   <td>${Math.max(0,Number(p.cantidad)-Number(p.cantidad_recibida||0))}</td><td>${money(p.precio,p.moneda)}</td><td style="text-align:right">${money(p.cantidad*p.precio,p.moneda)}</td></tr>`).join("")}</tbody></table></div>
   <p style="text-align:right"><b>${money(s.total_mxn)}</b> · ${money(s.total_usd,"USD")}</p>
   ${s.notas?`<p class="mut">Notas: ${esc(s.notas)}</p>`:""}`;
 }
