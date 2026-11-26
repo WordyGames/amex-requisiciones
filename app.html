@@ -50,6 +50,8 @@ td input,td select{padding:6px;font-size:13px}
 .urg{background:var(--bad);color:#fff}
 .lnk{color:var(--o);font-weight:700;text-decoration:underline;cursor:pointer}
 .mut{color:var(--mut);font-size:13px}
+.notas-osen{margin:6px 0 0;padding:0;list-style:none;min-width:160px;max-width:36ch}
+.notas-osen li{margin-top:4px;white-space:pre-wrap;overflow-wrap:anywhere}
 .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:12px}.bar>div{min-width:180px}
 .empty{color:var(--mut);text-align:center;padding:30px}
 .err{background:#fbe4e1;color:var(--bad);padding:10px 14px;border-radius:2px;margin-bottom:12px;font-weight:600}
@@ -467,7 +469,7 @@ function tablaHTML(list, acciones){
   return `<table><thead><tr><th>Folio</th><th>OSEN</th><th>Fechas y plazo</th><th>Solicita</th><th>Partidas</th><th>Proveedor</th><th style="text-align:right">Total</th><th>Estatus</th><th></th></tr></thead><tbody>
   ${list.map(s=>`<tr>
     <td><span class="lnk" onclick="verSolicitud(${s.id})">${esc(s.folio)}</span>${s.prioridad==="urgente"?' <span class="p urg">URGENTE</span>':""}</td>
-    <td><button class="ghost sm" data-osen="${esc(s.osen)}" onclick="verOsen(this.dataset.osen)">${esc(s.osen)}</button></td>
+    <td><button class="ghost sm" data-osen="${esc(s.osen)}" onclick="verOsen(this.dataset.osen)">${esc(s.osen)}</button>${vista==="seguimiento"?notasOsen([s]):""}</td>
     <td>${fechasPedido(s,hoy)}</td><td>${esc(s.solicita_nombre||"—")}</td>
     <td>${(s.partidas||[]).slice(0,2).map(p=>esc(p.descripcion)+(vista==="recibir"?` · Faltan ${Math.max(0,Number(p.cantidad)-Number(p.cantidad_recibida||0))}`:"")).join(", ")}${(s.partidas||[]).length>2?` +${s.partidas.length-2}`:""}</td>
     <td>${esc(s.proveedor||"—")}${s.tipo?`<div class="mut">${esc(s.pais_compra||s.tipo)}${s.tipo==="internacional"?` · ${esc(s.comprador_nombre||"Paco")}`:""}</div>`:""}</td>
@@ -720,7 +722,7 @@ function vOsen(){
   }).sort((a,b)=>String(b.ult).localeCompare(String(a.ult)));
   LISTAS.osen = {filas};
   return `<div class="card"><h2>Pedidos por OSEN</h2>
-  <div class="bar"><div style="flex:1"><label>Buscar OSEN, folio, proveedor o partida</label><input id="f-osen" oninput="pintarOsen()"></div>
+  <div class="bar"><div style="flex:1"><label>Buscar OSEN, folio, proveedor, partida o nota</label><input id="f-osen" oninput="pintarOsen()"></div>
   <div><label>Estatus</label><select id="f-osen-st" onchange="pintarOsen()"><option value="">Todos</option>${Object.entries(ESTATUS).map(([k,v])=>`<option value="${k}">${v}</option>`).join("")}</select></div>
   <div><button class="ghost" onclick="exportar('todo')">Exportar Excel</button></div></div>
   <div class="tbl" id="t-osen">${osenHTML(filas)}</div></div>`;
@@ -728,13 +730,18 @@ function vOsen(){
 function pintarOsen(){
   const t = $("f-osen").value.toLowerCase().trim(), st = $("f-osen-st").value;
   const f = LISTAS.osen.filas.filter(r => (!st || r.l.some(s=>s.estatus===st)) &&
-    (!t || [r.osen, ...r.l.map(s=>[s.folio,s.proveedor,...s.partidas.map(p=>p.descripcion+" "+(p.no_parte||""))].join(" "))].join(" ").toLowerCase().includes(t)));
+    (!t || [r.osen, ...r.l.map(s=>[s.folio,s.proveedor,s.notas,...s.partidas.map(p=>p.descripcion+" "+(p.no_parte||""))].join(" "))].join(" ").toLowerCase().includes(t)));
   $("t-osen").innerHTML = osenHTML(f);
+}
+function notasOsen(pedidos){
+  const notas = pedidos.filter(p=>p.notas?.trim());
+  if(!notas.length) return "";
+  return `<ul class="notas-osen" aria-label="Notas de requisiciones">${notas.map(p=>`<li><b>${pedidos.length>1?esc(p.folio):"Nota"}</b> · ${esc(p.notas.trim())}</li>`).join("")}</ul>`;
 }
 function osenHTML(f){
   if(!f.length) return '<div class="empty">Sin pedidos.</div>';
   return `<table><thead><tr><th>OSEN</th><th>Pedidos</th><th>Quién</th><th>Última fecha</th><th style="text-align:right">Total</th><th>Avance</th></tr></thead><tbody>
-  ${f.map(r=>`<tr><td><button class="ghost sm" data-osen="${esc(r.osen)}" onclick="verOsen(this.dataset.osen)">${esc(r.osen)}</button></td><td>${r.n}</td><td>${esc(r.quien)}</td><td>${fecha(r.ult)}</td>
+  ${f.map(r=>`<tr><td><button class="ghost sm" data-osen="${esc(r.osen)}" onclick="verOsen(this.dataset.osen)">${esc(r.osen)}</button>${notasOsen(r.l)}</td><td>${r.n}</td><td>${esc(r.quien)}</td><td>${fecha(r.ult)}</td>
   <td style="text-align:right;white-space:nowrap">${money(r.tot)}<div class="mut">${money(r.totU,"USD")}</div></td>
   <td>${r.rec===r.n?pill("recibido"):r.n===1?pill(r.l[0].estatus):`<span class="p">${r.rec} de ${r.n} recibidos</span>
     ${r.l.some(s=>s.estatus==="parcial")?`<span class="p st-parcial">${r.l.filter(s=>s.estatus==="parcial").length} parcial(es)</span>`:""}`}</td></tr>`).join("")}</tbody></table>`;
