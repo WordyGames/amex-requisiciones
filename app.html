@@ -315,7 +315,7 @@ function vNueva(){
     <div><label>Empresa</label><select id="n-emp">${EMPRESAS.map(e=>`<option>${e}</option>`).join("")}</select></div>
     <div><label>OSEN <span class="req">*</span></label><input id="n-osen" placeholder="OSEN-2836"></div>
     <div><label>Prioridad</label><select id="n-pri"><option value="normal">Normal</option><option value="urgente">Urgente (equipo parado)</option></select></div>
-    <div><label>Fecha requerida</label><input type="date" id="n-fecha"></div>
+    <div><label for="n-fecha">Fecha requerida <span class="req">*</span></label><input type="date" id="n-fecha" required></div>
   </div>
   <label>Partidas</label>
   <div class="tbl"><table><thead><tr><th>Descripción *</th><th>No. parte</th><th style="width:80px">Cant.</th><th style="width:90px">Moneda</th><th style="width:120px">Precio estimado</th><th></th></tr></thead><tbody id="n-partidas"></tbody></table></div>
@@ -332,6 +332,7 @@ function filaPartida(){
   $("n-partidas").appendChild(tr);
 }
 async function guardarNueva(){
+  if(!$("n-fecha").reportValidity()) return;
   const osen = $("n-osen").value.trim();
   if(!osen){ aviso("La OSEN es obligatoria."); $("n-osen").focus(); return; }
   const partidas = [...$("n-partidas").querySelectorAll("tr")].map(tr=>({
@@ -355,8 +356,10 @@ function filtroBar(id){
 function aplicaFiltro(list, id){
   const t = ($("f-"+id)?.value||"").toLowerCase().trim();
   const plazo = id==="trabajo" ? $("f-trabajo-plazo")?.value : "";
-  if(plazo) list = list.filter(s=>plazo==="urgente" ? s.prioridad==="urgente" :
-    plazo==="sin_fecha" ? !s.fecha_requerida : s.fecha_requerida && s.fecha_requerida < hoyMexico());
+  if(plazo){
+    const hoy = hoyMexico();
+    list = list.filter(s=>plazo==="urgente" ? s.prioridad==="urgente" : alertaPlazo(s,hoy)?.clave===plazo);
+  }
   if(!t) return list;
   return list.filter(s => [s.folio,s.osen,s.proveedor,s.solicita_nombre,s.empresa, ...(s.partidas||[]).map(p=>p.descripcion+" "+(p.no_parte||""))].join(" ").toLowerCase().includes(t));
 }
@@ -369,17 +372,18 @@ function tablaLista(id, list, acciones){
   }
   LISTAS[id] = {list, acciones};
   const plazo = id==="trabajo" ? `<p><label for="f-trabajo-plazo">Plazo y prioridad</label>
-    <select id="f-trabajo-plazo" onchange="render2('trabajo')"><option value="">Todos</option><option value="urgente">Urgentes</option><option value="vencido">Vencidos</option><option value="sin_fecha">Sin fecha</option></select></p>` : "";
+    <select id="f-trabajo-plazo" onchange="render2('trabajo')"><option value="">Todos</option><option value="urgente">Urgentes</option><option value="atrasado">Atrasados</option><option value="justo">Justos de tiempo</option><option value="tiempo">En tiempo</option><option value="sin_fecha">Sin fecha requerida</option></select></p>` : "";
   return filtroBar(id) + plazo + `<div class="tbl" id="t-${id}">${tablaHTML(list, acciones)}</div>`;
 }
 function render2(id){ const L = LISTAS[id]; $("t-"+id).innerHTML = tablaHTML(aplicaFiltro(L.list,id), L.acciones); }
 function tablaHTML(list, acciones){
   if(!list.length) return '<div class="empty">No hay pedidos aquí.</div>';
-  return `<table><thead><tr><th>Folio</th><th>OSEN</th><th>Fecha</th><th>Solicita</th><th>Partidas</th><th>Proveedor</th><th style="text-align:right">Total</th><th>Estatus</th><th></th></tr></thead><tbody>
+  const hoy = hoyMexico();
+  return `<table><thead><tr><th>Folio</th><th>OSEN</th><th>Fechas y plazo</th><th>Solicita</th><th>Partidas</th><th>Proveedor</th><th style="text-align:right">Total</th><th>Estatus</th><th></th></tr></thead><tbody>
   ${list.map(s=>`<tr>
     <td><span class="lnk" onclick="verSolicitud(${s.id})">${esc(s.folio)}</span>${s.prioridad==="urgente"?' <span class="p urg">URGENTE</span>':""}</td>
     <td><button class="ghost sm" data-osen="${esc(s.osen)}" onclick="verOsen(this.dataset.osen)">${esc(s.osen)}</button></td>
-    <td>${fecha(s.created_at)}${s.fecha_requerida?`<div class="mut">Requerida ${fecha(s.fecha_requerida)}</div>`:""}</td><td>${esc(s.solicita_nombre||"—")}</td>
+    <td>${fechasPedido(s,hoy)}</td><td>${esc(s.solicita_nombre||"—")}</td>
     <td>${(s.partidas||[]).slice(0,2).map(p=>esc(p.descripcion)+(vista==="recibir"?` · Faltan ${Math.max(0,Number(p.cantidad)-Number(p.cantidad_recibida||0))}`:"")).join(", ")}${(s.partidas||[]).length>2?` +${s.partidas.length-2}`:""}</td>
     <td>${esc(s.proveedor||"—")}${s.tipo?`<div class="mut">${esc(s.tipo)}</div>`:""}</td>
     <td style="text-align:right;white-space:nowrap">${money(s.total_mxn)}<div class="mut">${money(s.total_usd,"USD")}</div></td>
@@ -393,6 +397,35 @@ function hoyMexico(){
     .formatToParts(new Date());
   const fecha = Object.fromEntries(partes.map(p=>[p.type,p.value]));
   return `${fecha.year}-${fecha.month}-${fecha.day}`;
+}
+const fechaHora = valor => valor ? new Intl.DateTimeFormat("es-MX",{
+  timeZone:"America/Mexico_City",dateStyle:"short",timeStyle:"short"
+}).format(new Date(valor)) : "—";
+const diasEntre = (a,b) => Math.round((Date.parse(b)-Date.parse(a))/86400000);
+const textoDias = cantidad => `${cantidad} ${cantidad===1?"día":"días"}`;
+function alertaPlazo(s,hoy){
+  if(["recibido","rechazada","cancelada"].includes(s.estatus)) return null;
+  const quedan = s.fecha_requerida ? diasEntre(hoy,s.fecha_requerida) : null;
+  const llegada = s.fecha_tentativa ? diasEntre(hoy,s.fecha_tentativa) : null;
+  const margen = llegada!==null && quedan!==null ? quedan-llegada : null;
+  const cuenta = quedan===null ? "Sin fecha requerida" : quedan<0 ? `${textoDias(-quedan)} de atraso` :
+    quedan===0 ? "Se requiere hoy" : `Faltan ${textoDias(quedan)} para la fecha requerida`;
+  if(quedan!==null && quedan<0) return {clave:"atrasado",etiqueta:"Atrasado",detalle:cuenta};
+  if(llegada!==null && llegada<0) return {clave:"atrasado",etiqueta:"Atrasado",detalle:`Llegada vencida hace ${textoDias(-llegada)} · ${cuenta}`};
+  if(margen!==null && margen<0) return {clave:"atrasado",etiqueta:"Atrasado previsto",detalle:`Llegada ${textoDias(-margen)} después de la fecha requerida · ${cuenta}`};
+  if(quedan===null) return {clave:"sin_fecha",etiqueta:"Sin fecha requerida",detalle:""};
+  if(quedan<=2 || (margen!==null && margen<=2)) return {clave:"justo",etiqueta:"Justo de tiempo",detalle:cuenta};
+  return {clave:"tiempo",etiqueta:"En tiempo",detalle:cuenta};
+}
+function fechasPedido(s,hoy){
+  const plazo = alertaPlazo(s,hoy);
+  const colores = {atrasado:"st-rechazada",justo:"st-por_aprobar",tiempo:"st-recibido",sin_fecha:""};
+  const creado = s.created_at ? new Date(s.created_at).toLocaleDateString("sv-SE",{timeZone:"America/Mexico_City"}) : null;
+  const antiguedad = plazo && creado ? ` · ${textoDias(Math.max(0,diasEntre(creado,hoy)))} abierto` : "";
+  return `<div class="mut">Creado ${fechaHora(s.created_at)}${antiguedad}</div>
+    <div class="mut">Llegada tentativa ${s.fecha_tentativa?fecha(s.fecha_tentativa):"por definir"}</div>
+    <div class="mut">Requerida ${fecha(s.fecha_requerida)}</div>
+    ${plazo?`<span class="p ${colores[plazo.clave]}">${plazo.etiqueta}</span><div class="mut">${plazo.detalle}</div>`:""}`;
 }
 function tiempoEnEtapa(inicio){
   const dias = Math.max(0,Math.floor((Date.now()-Date.parse(inicio))/86400000));
@@ -439,6 +472,7 @@ function compraUI(id){
   <div class="g"><div><label>Tipo</label><select id="c-tipo">${soloLocal?'<option value="local">Local</option>':`<option value="local" ${s.tipo==="local"?"selected":""}>Local</option><option value="internacional" ${s.tipo==="internacional"?"selected":""}>Internacional</option>`}</select></div>
   <div><label>Proveedor / DMS</label><input id="c-prov" value="${esc(s.proveedor||"")}"></div>
   <div><label>Estatus</label><select id="c-est">${["por_comprar","comprado","en_transito","cancelada"].map(e=>`<option value="${e}" ${s.estatus===e?"selected":""}>${ESTATUS[e]}</option>`).join("")}</select></div></div>
+  <p><label for="c-llegada">Llegada tentativa a almacén</label><input type="date" id="c-llegada" value="${esc(s.fecha_tentativa||"")}"></p>
   <h3>Precios reales</h3><div class="tbl"><table><thead><tr><th>Descripción</th><th>No. parte</th><th>Cant.</th><th>Moneda</th><th>Precio</th></tr></thead><tbody>
   ${s.partidas.map(p=>`<tr data-id="${p.id}"><td>${esc(p.descripcion)}</td><td>${esc(p.no_parte||"")}</td><td>${p.cantidad}</td>
    <td><select class="cm"><option ${p.moneda==="MXN"?"selected":""}>MXN</option><option ${p.moneda==="USD"?"selected":""}>USD</option></select></td>
@@ -447,8 +481,15 @@ function compraUI(id){
   <button class="btn" onclick="guardarCompra(${id})">Guardar</button> <button class="ghost" onclick="cerrarModal()">Cancelar</button>`);
 }
 async function guardarCompra(id){
+  const estatus = $("c-est").value;
+  const fecha_tentativa = $("c-llegada").value;
+  if(["comprado","en_transito"].includes(estatus) && !fecha_tentativa){
+    alert("Indica la fecha tentativa de llegada a almacén.");
+    $("c-llegada").focus();
+    return;
+  }
   const partidas = [...document.querySelectorAll("#modal-body tr[data-id]")].map(tr=>({id:+tr.dataset.id, moneda:tr.querySelector(".cm").value, precio:tr.querySelector(".cp").value}));
-  try{ await rpc("actualizar_compra",{p_token:S.token,p_id:id,p:{tipo:$("c-tipo").value,proveedor:$("c-prov").value,estatus:$("c-est").value,partidas}});
+  try{ await rpc("actualizar_compra",{p_token:S.token,p_id:id,p:{tipo:$("c-tipo").value,proveedor:$("c-prov").value,estatus,fecha_tentativa,partidas}});
     cerrarModal(); await recargar(); aviso("Compra actualizada.", true); }
   catch(e){ aviso(e.message); cerrarModal(); }
 }
@@ -520,7 +561,8 @@ function detalleSol(s){
   };
   return `<h3>${esc(s.folio)} · ${pill(s.estatus)}${s.prioridad==="urgente"?' <span class="p urg">URGENTE</span>':""}</h3>
   ${responsable?`<p><b>Siguiente acción</b> · ${responsable} · ${botones[accion]||""}</p>`:""}
-  <p class="mut">Último movimiento ${fecha(s.updated_at||s.created_at)} · Requerida ${fecha(s.fecha_requerida)}${responsable && s.fecha_requerida && s.fecha_requerida<hoyMexico()?" · Vencida":""}${responsable && s.etapa_desde?` · ${tiempoEnEtapa(s.etapa_desde)}`:""}</p>
+  ${fechasPedido(s,hoyMexico())}
+  <p class="mut">Último movimiento ${fecha(s.updated_at||s.created_at)}${responsable && s.etapa_desde?` · ${tiempoEnEtapa(s.etapa_desde)}`:""}</p>
   <p class="mut">${esc(s.empresa)} · Solicitó <b>${esc(s.solicita_nombre||"—")}</b> el ${fecha(s.created_at)}
    ${s.comprador_nombre?` · Compró <b>${esc(s.comprador_nombre)}</b>`:""} · Proveedor: <b>${esc(s.proveedor||"—")}</b>${s.tipo?` (${esc(s.tipo)})`:""}
    ${s.aprobado_por?` · ${s.estatus==="rechazada"?"Rechazó":"Aprobó"} ${esc(s.aprobado_por)}${s.comentario_aprobacion?`: "${esc(s.comentario_aprobacion)}"`:""}`:""}
@@ -655,6 +697,7 @@ function adminEditar(id){
   <div><label>OSEN *</label><input id="e-osen" value="${esc(s.osen)}"></div>
   <div><label>Prioridad</label><select id="e-pri"><option value="normal">Normal</option><option value="urgente" ${s.prioridad==="urgente"?"selected":""}>Urgente</option></select></div>
   <div><label>Fecha requerida</label><input id="e-fr" type="date" value="${esc(s.fecha_requerida||"")}"></div>
+  <div><label for="e-llegada">Llegada tentativa a almacén</label><input id="e-llegada" type="date" value="${esc(s.fecha_tentativa||"")}"></div>
   <div><label>Tipo</label><select id="e-tipo"><option value="">—</option><option value="local" ${s.tipo==="local"?"selected":""}>Local</option><option value="internacional" ${s.tipo==="internacional"?"selected":""}>Internacional</option></select></div>
   <div><label>Proveedor</label><input id="e-prov" value="${esc(s.proveedor||"")}"></div>
   <div><label>Estatus</label><select id="e-est">${Object.entries(ESTATUS).map(([k,v])=>`<option value="${k}" ${s.estatus===k?"selected":""}>${v}</option>`).join("")}</select></div>
@@ -674,7 +717,7 @@ function filaEdit(p){
 async function adminGuardarSol(id){
   const partidas = [...$("e-parts").querySelectorAll("tr")].map(tr=>({descripcion:tr.querySelector(".ed").value.trim(), no_parte:tr.querySelector(".en").value,
     cantidad:tr.querySelector(".ec").value, cantidad_recibida:tr.querySelector(".er").value, moneda:tr.querySelector(".em").value, precio:tr.querySelector(".ep").value})).filter(p=>p.descripcion);
-  const p = {id, empresa:$("e-emp").value, osen:$("e-osen").value, prioridad:$("e-pri").value, fecha_requerida:$("e-fr").value, tipo:$("e-tipo").value,
+  const p = {id, empresa:$("e-emp").value, osen:$("e-osen").value, prioridad:$("e-pri").value, fecha_requerida:$("e-fr").value, fecha_tentativa:$("e-llegada").value, tipo:$("e-tipo").value,
     proveedor:$("e-prov").value, estatus:$("e-est").value, tc:$("e-tc").value, notas:$("e-notas").value, partidas};
   if(!p.osen.trim()){ alert("La OSEN es obligatoria"); return; }
   try{ await rpc("admin_guardar_solicitud",{p_token:S.token,p}); cerrarModal(); await recargar(); aviso("Pedido guardado.", true); }catch(e){ alert(e.message); }
