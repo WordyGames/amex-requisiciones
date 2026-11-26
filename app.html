@@ -324,21 +324,24 @@ function vNueva(){
   <p class="mut">Si el total pasa de US$${esc(TC.umbral_usd||10000)} se manda a aprobación de Gabriel.</p>
   <button class="btn" onclick="guardarNueva()">Enviar solicitud</button></div>`;
 }
-function filaPartida(){
+function filaPartida(p={}, destino="n-partidas"){
   const tr = document.createElement("tr");
-  tr.innerHTML = `<td><input class="pd"></td><td><input class="pn"></td><td><input class="pc" type="number" min="0" step="any" value="1"></td>
-   <td><select class="pm"><option>MXN</option><option>USD</option></select></td><td><input class="pp" type="number" min="0" step="any"></td>
+  tr.innerHTML = `<td><input class="pd" value="${esc(p.descripcion||"")}"></td><td><input class="pn" value="${esc(p.no_parte||"")}"></td><td><input class="pc" type="number" min="0" step="any" value="${esc(p.cantidad??1)}"></td>
+   <td><select class="pm"><option>MXN</option><option ${p.moneda==="USD"?"selected":""}>USD</option></select></td><td><input class="pp" type="number" min="0" step="any" value="${esc(p.precio??"")}"></td>
    <td><button class="ghost sm" onclick="this.closest('tr').remove()">✕</button></td>`;
-  $("n-partidas").appendChild(tr);
+  $(destino).appendChild(tr);
+}
+function leerPartidas(destino){
+  return [...$(destino).querySelectorAll("tr")].map(tr=>({
+    descripcion:tr.querySelector(".pd").value.trim(), no_parte:tr.querySelector(".pn").value.trim(),
+    cantidad:tr.querySelector(".pc").value, moneda:tr.querySelector(".pm").value, precio:tr.querySelector(".pp").value
+  })).filter(p=>p.descripcion);
 }
 async function guardarNueva(){
   if(!$("n-fecha").reportValidity()) return;
   const osen = $("n-osen").value.trim();
   if(!osen){ aviso("La OSEN es obligatoria."); $("n-osen").focus(); return; }
-  const partidas = [...$("n-partidas").querySelectorAll("tr")].map(tr=>({
-    descripcion: tr.querySelector(".pd").value.trim(), no_parte: tr.querySelector(".pn").value.trim(),
-    cantidad: tr.querySelector(".pc").value, moneda: tr.querySelector(".pm").value, precio: tr.querySelector(".pp").value
-  })).filter(p=>p.descripcion);
+  const partidas = leerPartidas("n-partidas");
   if(!partidas.length){ aviso("Agrega al menos una partida con descripción."); return; }
   try{
     const r = await rpc("crear_solicitud", {p_token:S.token, p:{empresa:$("n-emp").value, osen, prioridad:$("n-pri").value,
@@ -442,8 +445,67 @@ function vTrabajo(){
     })}</div>`;
 }
 function vMias(){
-  const mias = S.permisos.includes("admin") ? DATA : DATA.filter(s=>s.solicita_nombre===S.nombre);
-  return `<div class="card"><h2>Mis solicitudes</h2>${tablaLista("mias", mias)}</div>`;
+  const mias = S.permisos.includes("admin") ? DATA : DATA.filter(s=>s.solicita_id===S.id);
+  return `<div class="card"><h2>Mis solicitudes</h2>${tablaLista("mias",mias,botonEditarPropia)}</div>`;
+}
+function puedeEditarPropia(s){
+  return Boolean(S.id && s.solicita_id===S.id && tiene("solicitar") &&
+    ["por_aprobar","por_comprar","comprado","en_transito","parcial"].includes(s.estatus));
+}
+function botonEditarPropia(s){
+  return puedeEditarPropia(s) ? `<button class="ghost sm" onclick="editarPropia(${Number(s.id)})">Editar solicitud</button>` : "";
+}
+function editarPropia(id){
+  const s = DATA.find(p=>p.id===id);
+  if(!s || !puedeEditarPropia(s)) return;
+  const completa = ["por_aprobar","por_comprar"].includes(s.estatus);
+  abrirModal(`<h2>Editar ${esc(s.folio)}</h2>
+    ${completa?'<p class="mut">Al cambiar las partidas se revisará de nuevo si requiere aprobación.</p>':'<p class="mut">Ya hay una compra registrada. Puedes corregir los datos de la solicitud. Para cambios en partidas, cantidades o precios, contacta a Admin.</p>'}
+    <div class="g">
+      ${completa?`<div><label for="pr-empresa">Empresa</label><select id="pr-empresa">${EMPRESAS.map(e=>`<option ${e===s.empresa?"selected":""}>${esc(e)}</option>`).join("")}</select></div>`:""}
+      <div><label for="pr-osen">OSEN</label><input id="pr-osen" value="${esc(s.osen)}" required></div>
+      <div><label for="pr-fecha">Fecha requerida</label><input type="date" id="pr-fecha" value="${esc(s.fecha_requerida||"")}"></div>
+      <div><label for="pr-prioridad">Prioridad</label><select id="pr-prioridad"><option value="normal">Normal</option><option value="urgente" ${s.prioridad==="urgente"?"selected":""}>Urgente</option></select></div>
+    </div>
+    ${completa?`<div class="tbl"><table><thead><tr><th>Descripción</th><th>No. parte</th><th>Cantidad</th><th>Moneda</th><th>Precio estimado</th><th></th></tr></thead><tbody id="pr-partidas"></tbody></table></div>
+      <button class="ghost sm" onclick="filaPartida({},'pr-partidas')">+ Partida</button>`:""}
+    <label for="pr-notas">Notas</label><textarea id="pr-notas" rows="2">${esc(s.notas||"")}</textarea>
+    <p id="pr-error" class="mut" role="status"></p>
+    <button class="btn" onclick="guardarPropia(${Number(s.id)},this)">Guardar</button> <button class="ghost" onclick="cerrarModal()">Cancelar</button>`);
+  $("pr-osen").dataset.actualizado = s.updated_at||"";
+  if(completa){
+    s.partidas.forEach(p=>filaPartida(p,"pr-partidas"));
+    $("pr-partidas").dataset.original = JSON.stringify(leerPartidas("pr-partidas"));
+    $("pr-empresa").dataset.original = $("pr-empresa").value;
+  }
+}
+async function guardarPropia(id,boton){
+  if(boton.disabled) return;
+  const error = $("pr-error");
+  const osen = $("pr-osen").value.trim();
+  if(!osen){ error.textContent = "La OSEN es obligatoria."; $("pr-osen").focus(); return; }
+  const p = {osen,actualizado:$("pr-osen").dataset.actualizado||null,fecha_requerida:$("pr-fecha").value,
+    prioridad:$("pr-prioridad").value,notas:$("pr-notas").value};
+  if($("pr-partidas")){
+    const partidas = leerPartidas("pr-partidas");
+    const empresa = $("pr-empresa").value;
+    if(!partidas.length || partidas.some(a=>!(Number(a.cantidad)>0) || Number(a.precio)<0)){
+      error.textContent = "Agrega al menos una partida y revisa las cantidades y precios.";
+      return;
+    }
+    if(JSON.stringify(partidas)!==$("pr-partidas").dataset.original || empresa!==$("pr-empresa").dataset.original){
+      p.partidas = partidas;
+      p.empresa = empresa;
+    }
+  }
+  boton.disabled = true;
+  try{
+    await rpc("editar_solicitud_propia",{p_token:S.token,p_id:id,p});
+    cerrarModal();
+    await recargar();
+    aviso("Solicitud actualizada.",true);
+  }catch(e){ error.textContent = e.message; }
+  finally{ boton.disabled = false; }
 }
 function vAprobar(){
   const l = DATA.filter(s=>s.estatus==="por_aprobar");
@@ -582,7 +644,7 @@ function verOsen(osen){
 function verSolicitud(id){
   const s = DATA.find(x=>x.id===id);
   if(!s){ alert("Este pedido ya no está disponible para tu usuario."); return; }
-  abrirModal(`<button class="ghost" style="float:right" onclick="cerrarModal()">Cerrar</button><h2>${esc(s.osen)}</h2>${detalleSol(s)}
+  abrirModal(`<button class="ghost" style="float:right" onclick="cerrarModal()">Cerrar</button><h2>${esc(s.osen)}</h2>${botonEditarPropia(s)}${detalleSol(s)}
   <h3>Historial</h3>${(s.eventos||[]).map(e=>`<div class="mut">${new Date(e.created_at).toLocaleString("es-MX")} · ${esc(e.usuario)} ${esc(e.accion)} ${esc(e.detalle||"")}</div>`).join("")||'<div class="mut">—</div>'}`);
 }
 
