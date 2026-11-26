@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#FF5808">
+<title>Liumaq · Requisiciones</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<style>
+:root{--o:#FF5808;--od:#d94600;--ink:#141414;--mut:#6b6f76;--b:#e4e4e4;--bg:#f3f3f1;--ok:#1a7a3c;--warn:#a8710a;--bad:#c0392b}
+*{box-sizing:border-box}
+body{margin:0;font-family:Barlow,Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:15px}
+h1,h2,h3,h4,.cond,th,button,.tab{font-family:'Barlow Condensed',sans-serif;letter-spacing:.03em;text-transform:uppercase}
+h2{font-size:26px;font-weight:800;margin:0 0 12px}h3{font-size:20px;margin:18px 0 8px}
+.top{background:#0f0f0f;color:#fff;padding:12px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;border-bottom:4px solid var(--o)}
+.brand{font-family:'Barlow Condensed';font-weight:800;font-size:22px;letter-spacing:.04em}
+.brand small{display:block;font-family:Barlow;font-size:11px;font-weight:500;color:#aaa;letter-spacing:0;text-transform:none}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;flex:1}
+.tab{background:transparent;color:#ddd;border:1px solid #333;border-radius:2px;padding:8px 13px;cursor:pointer;font-size:15px}
+.tab.on{background:var(--o);border-color:var(--o);color:#fff}
+.tab .n{background:#fff;color:var(--o);border-radius:9px;padding:0 6px;margin-left:5px;font-size:12px}
+.who{font-size:13px;color:#bbb;text-align:right}.who a{color:var(--o);cursor:pointer;display:block}
+.wrap{max-width:1180px;margin:20px auto;padding:0 16px 60px}
+.card{background:#fff;border:1px solid var(--b);border-radius:4px;padding:18px;margin-bottom:14px;box-shadow:0 2px 10px rgba(0,0,0,.04)}
+label{display:block;font-size:12px;color:var(--mut);font-weight:600;margin:10px 0 4px}
+input,select,textarea{width:100%;padding:9px;border:1px solid var(--b);border-radius:2px;font-size:14px;font-family:inherit;background:#fff}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--o)}
+.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.btn{background:var(--o);color:#fff;border:0;border-radius:2px;padding:10px 18px;font-size:16px;font-weight:700;cursor:pointer}
+.btn:hover{background:var(--od)}.btn.sm{padding:6px 11px;font-size:14px}
+.ghost{background:#fff;border:1px solid #ccc;border-radius:2px;padding:8px 13px;cursor:pointer;font-size:14px}
+.ghost.sm{padding:5px 9px;font-size:13px}.ghost.bad{color:var(--bad);border-color:var(--bad)}
+.req{color:var(--bad)}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{background:#0f0f0f;color:#fff;text-align:left;padding:8px;font-size:13px;font-weight:600}
+td{padding:8px;border-bottom:1px solid var(--b);vertical-align:top}
+td input,td select{padding:6px;font-size:13px}
+.tbl{overflow-x:auto}
+.p{display:inline-block;border-radius:3px;padding:2px 8px;font-size:12px;font-weight:700;white-space:nowrap;background:#eee}
+.st-por_aprobar{background:#fdf0d5;color:var(--warn)}.st-rechazada{background:#fbe4e1;color:var(--bad)}
+.st-por_comprar{background:#fff0e6;color:var(--od)}.st-comprado{background:#e6ecf8;color:#1b3a6b}
+.st-en_transito{background:#eee4fb;color:#5b2a9e}.st-parcial{background:#e0f2f1;color:#00695c}
+.st-recibido{background:#e3f3e9;color:var(--ok)}.st-cancelada{background:#eee;color:#666}
+.urg{background:var(--bad);color:#fff}
+.lnk{color:var(--o);font-weight:700;text-decoration:underline;cursor:pointer}
+.mut{color:var(--mut);font-size:13px}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:12px}.bar>div{min-width:180px}
+.empty{color:var(--mut);text-align:center;padding:30px}
+.err{background:#fbe4e1;color:var(--bad);padding:10px 14px;border-radius:2px;margin-bottom:12px;font-weight:600}
+.okmsg{background:#e3f3e9;color:var(--ok);padding:10px 14px;border-radius:2px;margin-bottom:12px;font-weight:600}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-start;justify-content:center;z-index:50;padding:30px 12px;overflow:auto}
+.modal .card{max-width:900px;width:100%}
+.hidden{display:none!important}
+.login{max-width:380px;margin:60px auto}
+.side{display:grid;grid-template-columns:190px 1fr;gap:14px}
+.side .menu button{display:block;width:100%;text-align:left;margin-bottom:5px;background:#fff;border:1px solid var(--b);border-radius:2px;padding:9px 12px;cursor:pointer;font-size:15px}
+.side .menu button.on{background:#0f0f0f;color:#fff}
+.chk{display:inline-flex;align-items:center;gap:4px;margin-right:10px;font-size:13px}.chk input{width:auto}
+@media(max-width:700px){.side{grid-template-columns:1fr}.who{text-align:left}}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand">LIUMAQ · REQUISICIONES<small>Distribuidor autorizado LiuGong</small></div>
+  <div class="tabs" id="tabs"></div>
+  <div class="who" id="who"></div>
+</div>
+
+<div class="wrap">
+  <div id="msg"></div>
+
+  <div id="v-login" class="login card">
+    <h2>Entrar</h2>
+    <label>Usuario</label><select id="l-user"></select>
+    <label>Código</label><input type="password" id="l-code" onkeydown="if(event.key==='Enter')entrar()">
+    <br><br><button class="btn" style="width:100%" onclick="entrar()">Entrar</button>
+    <p class="mut" id="l-tc"></p>
+  </div>
+
+  <div id="v-app" class="hidden"></div>
+</div>
+
+<div id="modal" class="modal hidden" onclick="if(event.target.id==='modal')cerrarModal()"><div class="card" id="modal-body"></div></div>
+
+<script>
+const sb = supabase.createClient("https://iwnbscekenptumanpjcs.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml3bmJzY2VrZW5wdHVtYW5wamNzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyNzg2OTQsImV4cCI6MjA5NDg1NDY5NH0.7-YjXYAEXmkKGENNAWc99kplFrq7L8fQbPg1M0AhtNQ",
+  { db: { schema: "amex_requisiciones" } });
+
+const ESTATUS = {por_aprobar:"Por aprobar",rechazada:"Rechazada",por_comprar:"Por comprar",comprado:"Comprado",
+  en_transito:"En tránsito",parcial:"Recibido parcial",recibido:"Recibido",cancelada:"Cancelada"};
+const PERMISOS = {solicitar:"Solicitar",comprar:"Comprar (todo)",comprar_local:"Compra local",recibir:"Recibir (almacén)",aprobar:"Aprobar",consulta:"Consulta",admin:"Admin"};
+const EMPRESAS = ["Liumaq","AMEX Machinery"];
+
+let S = null;            // sesión {token,nombre,permisos}
+let DATA = [];           // solicitudes
+let TC = {};             // tipo de cambio + umbral
+let vista = null;
+
+// ---------- utilidades ----------
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const money = (n, cur="MXN") => (cur==="USD"?"US$":"$") + (Number(n)||0).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2});
+const fecha = d => d ? String(d).slice(0,10).split("-").reverse().join("/") : "—";
+const tiene = p => S && (S.permisos.includes(p) || S.permisos.includes("admin"));
+const pill = st => `<span class="p st-${esc(st)}">${esc(ESTATUS[st]||st)}</span>`;
+function aviso(t, ok){ $("msg").innerHTML = t ? `<div class="${ok?'okmsg':'err'}">${esc(t)}</div>` : ""; if(t) setTimeout(()=>{ if($("msg").textContent===t) $("msg").innerHTML=""; }, 5000); }
+async function rpc(fn, args){ const {data,error} = await sb.rpc(fn, args); if(error) throw new Error(error.message); return data; }
+function cerrarModal(){ $("modal").classList.add("hidden"); }
+function abrirModal(html){ $("modal-body").innerHTML = html; $("modal").classList.remove("hidden"); }
+
+// ---------- login ----------
+async function initLogin(){
+  try{
+    const us = await rpc("usuarios_login_lista");
+    $("l-user").innerHTML = us.map(u=>`<option value="${esc(u.nombre)}">${esc(u.nombre)} · ${esc(u.puesto||"")}</option>`).join("") + `<option value="Admin">Admin</option>`;
+    TC = await rpc("tc_actual");
+    if(TC.valor) $("l-tc").textContent = `Tipo de cambio: $${TC.valor} (${fecha(TC.fecha)})`;
+  }catch(e){ aviso("No se pudo conectar: " + e.message); }
+}
+async function entrar(){
+  try{
+    S = await rpc("login", { p_nombre: $("l-user").value, p_codigo: $("l-code").value });
+    sessionStorage.setItem("liumaq_req", JSON.stringify(S));
+    $("l-code").value = "";
+    arrancar();
+  }catch(e){ aviso(e.message); }
+}
+function salir(){ sessionStorage.removeItem("liumaq_req"); S=null; location.reload(); }
+
+// ---------- navegación ----------
+function menu(){
+  const m = [];
+  if(tiene("solicitar")) m.push(["nueva","+ Nueva solicitud"],["mias","Mis solicitudes"]);
+  if(tiene("aprobar")) m.push(["aprobar","Por aprobar", DATA.filter(s=>s.estatus==="por_aprobar").length]);
+  if(tiene("comprar")) m.push(["comprar","Por comprar", DATA.filter(s=>s.estatus==="por_comprar").length]);
+  else if(tiene("comprar_local")) m.push(["local","Compras locales", DATA.filter(esLocalPendiente).length]);
+  if(tiene("recibir")) m.push(["recibir","Por recibir", DATA.filter(s=>["comprado","en_transito","parcial"].includes(s.estatus)).length]);
+  if(tiene("consulta") || tiene("comprar")) m.push(["osen","Pedidos por OSEN"]);
+  if(S.permisos.includes("admin")) m.push(["admin","Admin"]);
+  return m;
+}
+const esLocalPendiente = s => ["por_comprar","comprado","en_transito"].includes(s.estatus) && (!s.tipo || s.tipo==="local");
+
+function pintarTabs(){
+  const m = menu();
+  if(!m.find(x=>x[0]===vista)) vista = m[0]?.[0];
+  $("tabs").innerHTML = m.map(([id,t,n])=>`<button class="tab ${id===vista?'on':''}" onclick="ir('${id}')">${esc(t)}${n?`<span class="n">${n}</span>`:""}</button>`).join("");
+  $("who").innerHTML = `${esc(S.nombre)}${TC.valor?` · TC $${TC.valor}`:""}<a onclick="salir()">Salir</a>`;
+}
+function ir(id){ vista = id; aviso(""); render(); }
+
+async function arrancar(){
+  $("v-login").classList.add("hidden"); $("v-app").classList.remove("hidden");
+  await recargar();
+}
+async function recargar(){
+  try{
+    [DATA, TC] = await Promise.all([rpc("listar_solicitudes",{p_token:S.token}), rpc("tc_actual")]);
+    render();
+  }catch(e){
+    if(/Sesión|expirada/i.test(e.message)){ aviso("Tu sesión expiró, vuelve a entrar."); sessionStorage.removeItem("liumaq_req"); setTimeout(()=>location.reload(),1500); }
+    else aviso(e.message);
+  }
+}
+function render(){
+  pintarTabs();
+  const v = {nueva:vNueva, mias:vMias, aprobar:vAprobar, comprar:vComprar, local:vLocal, recibir:vRecibir, osen:vOsen, admin:vAdmin}[vista];
+  $("v-app").innerHTML = v ? v() : '<div class="empty">Sin opciones para tu usuario.</div>';
+  if(vista==="nueva") filaPartida();
+  if(vista==="admin") adminCargar();
+}
+
+// ---------- nueva solicitud ----------
+function vNueva(){
+  return `<div class="card"><h2>Nueva solicitud</h2>
+  <div class="g">
+    <div><label>Empresa</label><select id="n-emp">${EMPRESAS.map(e=>`<option>${e}</option>`).join("")}</select></div>
+    <div><label>OSEN <span class="req">*</span></label><input id="n-osen" placeholder="OSEN-2836"></div>
+    <div><label>Prioridad</label><select id="n-pri"><option value="normal">Normal</option><option value="urgente">Urgente (equipo parado)</option></select></div>
+    <div><label>Fecha requerida</label><input type="date" id="n-fecha"></div>
+  </div>
+  <label>Partidas</label>
+  <div class="tbl"><table><thead><tr><th>Descripción *</th><th>No. parte</th><th style="width:80px">Cant.</th><th style="width:90px">Moneda</th><th style="width:120px">Precio estimado</th><th></th></tr></thead><tbody id="n-partidas"></tbody></table></div>
+  <br><button class="ghost" onclick="filaPartida()">+ Partida</button>
+  <label>Notas</label><textarea id="n-notas" rows="2"></textarea>
+  <p class="mut">Si el total pasa de US$${esc(TC.umbral_usd||10000)} se manda a aprobación de Gabriel.</p>
+  <button class="btn" onclick="guardarNueva()">Enviar solicitud</button></div>`;
+}
+function filaPartida(){
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td><input class="pd"></td><td><input class="pn"></td><td><input class="pc" type="number" min="0" step="any" value="1"></td>
+   <td><select class="pm"><option>MXN</option><option>USD</option></select></td><td><input class="pp" type="number" min="0" step="any"></td>
+   <td><button class="ghost sm" onclick="this.closest('tr').remove()">✕</button></td>`;
+  $("n-partidas").appendChild(tr);
+}
+async function guardarNueva(){
+  const osen = $("n-osen").value.trim();
+  if(!osen){ aviso("La OSEN es obligatoria."); $("n-osen").focus(); return; }
+  const partidas = [...$("n-partidas").querySelectorAll("tr")].map(tr=>({
+    descripcion: tr.querySelector(".pd").value.trim(), no_parte: tr.querySelector(".pn").value.trim(),
+    cantidad: tr.querySelector(".pc").value, moneda: tr.querySelector(".pm").value, precio: tr.querySelector(".pp").value
+  })).filter(p=>p.descripcion);
+  if(!partidas.length){ aviso("Agrega al menos una partida con descripción."); return; }
+  try{
+    const r = await rpc("crear_solicitud", {p_token:S.token, p:{empresa:$("n-emp").value, osen, prioridad:$("n-pri").value,
+      fecha_requerida:$("n-fecha").value, notas:$("n-notas").value, partidas}});
+    await recargar(); vista="mias"; render(); aviso(`Solicitud ${r.folio} enviada.`, true);
+  }catch(e){ aviso(e.message); }
+}
+
+// ---------- tablas comunes ----------
+function filtroBar(id){
+  return `<div class="bar"><div style="flex:1"><label>Buscar (folio, OSEN, proveedor, partida)</label><input id="f-${id}" oninput="render2('${id}')" placeholder="Ej. OSEN-2836"></div>
+  <div><button class="ghost" onclick="exportar('${id}')">Exportar Excel</button></div>
+  ${tiene("solicitar")?`<div><button class="ghost" onclick="importarUI()">Importar Excel</button></div>`:""}</div>`;
+}
+function aplicaFiltro(list, id){
+  const t = ($("f-"+id)?.value||"").toLowerCase().trim();
+  if(!t) return list;
+  return list.filter(s => [s.folio,s.osen,s.proveedor,s.solicita_nombre,s.empresa, ...(s.partidas||[]).map(p=>p.descripcion+" "+(p.no_parte||""))].join(" ").toLowerCase().includes(t));
+}
+const LISTAS = {};
+function tablaLista(id, list, acciones){
+  LISTAS[id] = {list, acciones};
+  return filtroBar(id) + `<div class="tbl" id="t-${id}">${tablaHTML(list, acciones)}</div>`;
+}
+function render2(id){ const L = LISTAS[id]; $("t-"+id).innerHTML = tablaHTML(aplicaFiltro(L.list,id), L.acciones); }
+function tablaHTML(list, acciones){
+  if(!list.length) return '<div class="empty">No hay pedidos aquí.</div>';
+  return `<table><thead><tr><th>Folio</th><th>OSEN</th><th>Fecha</th><th>Solicita</th><th>Partidas</th><th>Proveedor</th><th style="text-align:right">Total</th><th>Estatus</th><th></th></tr></thead><tbody>
+  ${list.map(s=>`<tr>
+    <td><span class="lnk" onclick="verSolicitud(${s.id})">${esc(s.folio)}</span>${s.prioridad==="urgente"?' <span class="p urg">URGENTE</span>':""}</td>
+    <td><span class="lnk" onclick="verOsen('${esc(s.osen)}')">${esc(s.osen)}</span></td>
+    <td>${fecha(s.created_at)}</td><td>${esc(s.solicita_nombre||"—")}</td>
+    <td>${(s.partidas||[]).slice(0,2).map(p=>esc(p.descripcion)).join(", ")}${s.partidas.length>2?` +${s.partidas.length-2}`:""}</td>
+    <td>${esc(s.proveedor||"—")}${s.tipo?`<div class="mut">${esc(s.tipo)}</div>`:""}</td>
+    <td style="text-align:right;white-space:nowrap">${money(s.total_mxn)}<div class="mut">${money(s.total_usd,"USD")}</div></td>
+    <td>${pill(s.estatus)}</td>
+    <td style="white-space:nowrap">${acciones?acciones(s):""}</td></tr>`).join("")}</tbody></table>`;
+}
+
+// ---------- vistas ----------
+function vMias(){
+  const mias = S.permisos.includes("admin") ? DATA : DATA.filter(s=>s.solicita_nombre===S.nombre);
+  return `<div class="card"><h2>Mis solicitudes</h2>${tablaLista("mias", mias)}</div>`;
+}
+function vAprobar(){
+  const l = DATA.filter(s=>s.estatus==="por_aprobar");
+  return `<div class="card"><h2>Por aprobar</h2><p class="mut">Solicitudes mayores a US$${esc(TC.umbral_usd)}.</p>
+  ${tablaLista("aprobar", l, s=>`<button class="btn sm" onclick="aprobar(${s.id},true)">Aprobar</button> <button class="ghost sm bad" onclick="aprobar(${s.id},false)">Rechazar</button>`)}</div>`;
+}
+async function aprobar(id, ok){
+  const c = prompt(ok ? "Comentario (opcional):" : "Motivo del rechazo:");
+  if(c===null) return;
+  try{ await rpc("aprobar_solicitud",{p_token:S.token,p_id:id,p_ok:ok,p_comentario:c}); await recargar(); aviso(ok?"Aprobada.":"Rechazada.", true); }
+  catch(e){ aviso(e.message); }
+}
+function vComprar(){
+  const l = DATA.filter(s=>["por_comprar","comprado","en_transito"].includes(s.estatus));
+  return `<div class="card"><h2>Por comprar</h2><p class="mut">Abre el pedido para poner proveedor/DMS, precios y estatus.</p>
+  ${tablaLista("comprar", l, s=>`<button class="btn sm" onclick="compraUI(${s.id})">Comprar</button>`)}</div>`;
+}
+function vLocal(){
+  const l = DATA.filter(esLocalPendiente);
+  return `<div class="card"><h2>Compras locales</h2>${tablaLista("local", l, s=>`<button class="btn sm" onclick="compraUI(${s.id})">Comprar</button>`)}</div>`;
+}
+function compraUI(id){
+  const s = DATA.find(x=>x.id===id); const soloLocal = !tiene("comprar");
+  abrirModal(`<h2>${esc(s.folio)} · ${esc(s.osen)}</h2>
+  <div class="g"><div><label>Tipo</label><select id="c-tipo">${soloLocal?'<option value="local">Local</option>':`<option value="local" ${s.tipo==="local"?"selected":""}>Local</option><option value="internacional" ${s.tipo==="internacional"?"selected":""}>Internacional</option>`}</select></div>
+  <div><label>Proveedor / DMS</label><input id="c-prov" value="${esc(s.proveedor||"")}"></div>
+  <div><label>Estatus</label><select id="c-est">${["por_comprar","comprado","en_transito","cancelada"].map(e=>`<option value="${e}" ${s.estatus===e?"selected":""}>${ESTATUS[e]}</option>`).join("")}</select></div></div>
+  <h3>Precios reales</h3><div class="tbl"><table><thead><tr><th>Descripción</th><th>No. parte</th><th>Cant.</th><th>Moneda</th><th>Precio</th></tr></thead><tbody>
+  ${s.partidas.map(p=>`<tr data-id="${p.id}"><td>${esc(p.descripcion)}</td><td>${esc(p.no_parte||"")}</td><td>${p.cantidad}</td>
+   <td><select class="cm"><option ${p.moneda==="MXN"?"selected":""}>MXN</option><option ${p.moneda==="USD"?"selected":""}>USD</option></select></td>
+   <td><input class="cp" type="number" step="any" value="${p.precio}"></td></tr>`).join("")}</tbody></table></div>
+  <p class="mut">Si con los precios reales pasa de US$${esc(TC.umbral_usd)} y no estaba aprobada, se manda a Gabriel.</p>
+  <button class="btn" onclick="guardarCompra(${id})">Guardar</button> <button class="ghost" onclick="cerrarModal()">Cancelar</button>`);
+}
+async function guardarCompra(id){
+  const partidas = [...document.querySelectorAll("#modal-body tr[data-id]")].map(tr=>({id:+tr.dataset.id, moneda:tr.querySelector(".cm").value, precio:tr.querySelector(".cp").value}));
+  try{ await rpc("actualizar_compra",{p_token:S.token,p_id:id,p:{tipo:$("c-tipo").value,proveedor:$("c-prov").value,estatus:$("c-est").value,partidas}});
+    cerrarModal(); await recargar(); aviso("Compra actualizada.", true); }
+  catch(e){ aviso(e.message); cerrarModal(); }
+}
+function vRecibir(){
+  const l = DATA.filter(s=>["comprado","en_transito","parcial"].includes(s.estatus));
+  return `<div class="card"><h2>Por recibir</h2>${tablaLista("recibir", l, s=>`<button class="btn sm" onclick="recibirUI(${s.id})">Recibir</button>`)}</div>`;
+}
+function recibirUI(id){
+  const s = DATA.find(x=>x.id===id);
+  abrirModal(`<h2>Recibir ${esc(s.folio)} · ${esc(s.osen)}</h2><p class="mut">Proveedor: ${esc(s.proveedor||"—")}</p>
+  <div class="tbl"><table><thead><tr><th>Descripción</th><th>No. parte</th><th>Pedido</th><th>Ya recibido</th><th>Llegó ahora</th></tr></thead><tbody>
+  ${s.partidas.map(p=>{const f=p.cantidad-p.cantidad_recibida;return `<tr data-id="${p.id}"><td>${esc(p.descripcion)}</td><td>${esc(p.no_parte||"")}</td><td>${p.cantidad}</td><td>${p.cantidad_recibida}</td>
+   <td><input class="rc" type="number" min="0" max="${f}" step="any" value="${f}"></td></tr>`}).join("")}</tbody></table></div><br>
+  <button class="btn" onclick="guardarRecibo(${id})">Confirmar recepción</button> <button class="ghost" onclick="cerrarModal()">Cancelar</button>`);
+}
+async function guardarRecibo(id){
+  const p = [...document.querySelectorAll("#modal-body tr[data-id]")].map(tr=>({id:+tr.dataset.id,cantidad:tr.querySelector(".rc").value}));
+  try{ await rpc("recibir_solicitud",{p_token:S.token,p_id:id,p}); cerrarModal(); await recargar(); aviso("Recepción guardada.", true); }
+  catch(e){ aviso(e.message); cerrarModal(); }
+}
+
+// ---------- OSEN (Luis Fuentes) ----------
+function vOsen(){
+  const g = {};
+  DATA.forEach(s=>{ (g[s.osen] ||= []).push(s); });
+  const filas = Object.entries(g).map(([osen, l])=>{
+    const tot = l.reduce((a,s)=>a+Number(s.total_mxn),0), totU = l.reduce((a,s)=>a+Number(s.total_usd),0);
+    const rec = l.filter(s=>s.estatus==="recibido").length;
+    const quien = [...new Set(l.map(s=>s.solicita_nombre))].join(", ");
+    const ult = l.map(s=>s.created_at).sort().pop();
+    return {osen, n:l.length, quien, ult, tot, totU, rec, l};
+  }).sort((a,b)=>String(b.ult).localeCompare(String(a.ult)));
+  LISTAS.osen = {filas};
+  return `<div class="card"><h2>Pedidos por OSEN</h2>
+  <div class="bar"><div style="flex:1"><label>Buscar OSEN, folio, proveedor o partida</label><input id="f-osen" oninput="pintarOsen()"></div>
+  <div><label>Estatus</label><select id="f-osen-st" onchange="pintarOsen()"><option value="">Todos</option>${Object.entries(ESTATUS).map(([k,v])=>`<option value="${k}">${v}</option>`).join("")}</select></div>
+  <div><button class="ghost" onclick="exportar('todo')">Exportar Excel</button></div></div>
+  <div class="tbl" id="t-osen">${osenHTML(filas)}</div></div>`;
+}
+function pintarOsen(){
+  const t = $("f-osen").value.toLowerCase().trim(), st = $("f-osen-st").value;
+  const f = LISTAS.osen.filas.filter(r => (!st || r.l.some(s=>s.estatus===st)) &&
+    (!t || [r.osen, ...r.l.map(s=>[s.folio,s.proveedor,...s.partidas.map(p=>p.descripcion+" "+(p.no_parte||""))].join(" "))].join(" ").toLowerCase().includes(t)));
+  $("t-osen").innerHTML = osenHTML(f);
+}
+function osenHTML(f){
+  if(!f.length) return '<div class="empty">Sin pedidos.</div>';
+  return `<table><thead><tr><th>OSEN</th><th>Pedidos</th><th>Quién</th><th>Última fecha</th><th style="text-align:right">Total</th><th>Avance</th></tr></thead><tbody>
+  ${f.map(r=>`<tr><td><span class="lnk" onclick="verOsen('${esc(r.osen)}')">${esc(r.osen)}</span></td><td>${r.n}</td><td>${esc(r.quien)}</td><td>${fecha(r.ult)}</td>
+  <td style="text-align:right;white-space:nowrap">${money(r.tot)}<div class="mut">${money(r.totU,"USD")}</div></td>
+  <td>${r.rec===r.n?pill("recibido"):r.n===1?pill(r.l[0].estatus):`<span class="p">${r.rec} de ${r.n} recibidos</span>`}</td></tr>`).join("")}</tbody></table>`;
+}
+function detalleSol(s){
+  return `<h3>${esc(s.folio)} · ${pill(s.estatus)}${s.prioridad==="urgente"?' <span class="p urg">URGENTE</span>':""}</h3>
+  <p class="mut">${esc(s.empresa)} · Solicitó <b>${esc(s.solicita_nombre||"—")}</b> el ${fecha(s.created_at)}
+   ${s.comprador_nombre?` · Compró <b>${esc(s.comprador_nombre)}</b>`:""} · Proveedor: <b>${esc(s.proveedor||"—")}</b>${s.tipo?` (${esc(s.tipo)})`:""}
+   ${s.aprobado_por?` · ${s.estatus==="rechazada"?"Rechazó":"Aprobó"} ${esc(s.aprobado_por)}${s.comentario_aprobacion?`: "${esc(s.comentario_aprobacion)}"`:""}`:""}
+   ${s.fecha_requerida?` · Requerida: ${fecha(s.fecha_requerida)}`:""} · TC ${esc(s.tc||"—")}</p>
+  <div class="tbl"><table><thead><tr><th>Descripción</th><th>No. parte</th><th>Cant.</th><th>Recibido</th><th>Precio</th><th style="text-align:right">Importe</th></tr></thead><tbody>
+  ${s.partidas.map(p=>`<tr><td>${esc(p.descripcion)}</td><td>${esc(p.no_parte||"")}</td><td>${p.cantidad}</td><td>${p.cantidad_recibida}</td>
+   <td>${money(p.precio,p.moneda)}</td><td style="text-align:right">${money(p.cantidad*p.precio,p.moneda)}</td></tr>`).join("")}</tbody></table></div>
+  <p style="text-align:right"><b>${money(s.total_mxn)}</b> · ${money(s.total_usd,"USD")}</p>
+  ${s.notas?`<p class="mut">Notas: ${esc(s.notas)}</p>`:""}`;
+}
+function verOsen(osen){
+  const l = DATA.filter(s=>s.osen===osen);
+  const tot = l.reduce((a,s)=>a+Number(s.total_mxn),0);
+  abrirModal(`<button class="ghost" style="float:right" onclick="cerrarModal()">Cerrar</button>
+  <h2>${esc(osen)}</h2><p class="mut">${l.length} pedido(s) · ${money(tot)}</p>${l.map(detalleSol).join("<hr>")}`);
+}
+function verSolicitud(id){
+  const s = DATA.find(x=>x.id===id);
+  abrirModal(`<button class="ghost" style="float:right" onclick="cerrarModal()">Cerrar</button><h2>${esc(s.osen)}</h2>${detalleSol(s)}
+  <h3>Historial</h3>${(s.eventos||[]).map(e=>`<div class="mut">${new Date(e.created_at).toLocaleString("es-MX")} · ${esc(e.usuario)} ${esc(e.accion)} ${esc(e.detalle||"")}</div>`).join("")||'<div class="mut">—</div>'}`);
+}
+
+// ---------- exportar / importar ----------
+function csvCampo(v){ return '"' + String(v ?? "").replace(/"/g,'""') + '"'; }
+function exportar(id){
+  let list = id==="todo" ? DATA : aplicaFiltro(LISTAS[id]?.list||DATA, id);
+  const H = ["Folio","OSEN","Empresa","Prioridad","Fecha","Solicita","Tipo","Proveedor","Estatus","Descripcion","No_parte","Cantidad","Recibido","Moneda","Precio","Total_solicitud_MXN","Total_solicitud_USD"];
+  const rows = [H.map(csvCampo).join(",")];
+  list.forEach(s => s.partidas.forEach(p => rows.push([s.folio,s.osen,s.empresa,s.prioridad,fecha(s.created_at),s.solicita_nombre,s.tipo,s.proveedor,ESTATUS[s.estatus],
+    p.descripcion,p.no_parte,p.cantidad,p.cantidad_recibida,p.moneda,p.precio,s.total_mxn,s.total_usd].map(csvCampo).join(","))));
+  descargar("pedidos_" + new Date().toISOString().slice(0,10) + ".csv", "﻿" + rows.join("\r\n"));
+}
+function descargar(nombre, txt){
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([txt],{type:"text/csv;charset=utf-8;"}));
+  a.download = nombre; document.body.appendChild(a); a.click(); a.remove();
+}
+function importarUI(){
+  abrirModal(`<h2>Importar Excel</h2>
+  <p>Guarda tu Excel como <b>CSV</b> con estas columnas (una fila por partida). Las filas con la misma OSEN se juntan en una solicitud.</p>
+  <p class="mut">OSEN, Empresa, Prioridad, Descripcion, No_parte, Cantidad, Moneda, Precio</p>
+  <button class="ghost" onclick="plantilla()">Descargar plantilla</button><br><br>
+  <input type="file" id="imp-file" accept=".csv,text/csv"><br><br>
+  <button class="btn" onclick="importar()">Importar</button> <button class="ghost" onclick="cerrarModal()">Cancelar</button>`);
+}
+function plantilla(){ descargar("plantilla_solicitudes.csv","﻿OSEN,Empresa,Prioridad,Descripcion,No_parte,Cantidad,Moneda,Precio\r\nOSEN-0000,Liumaq,normal,Filtro de aceite,53C0001,2,MXN,350\r\n"); }
+function parseCSV(text){
+  const rows=[]; let row=[], f="", q=false;
+  for(let i=0;i<text.length;i++){ const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){f+='"';i++;} else q=false; } else f+=c; }
+    else if(c==='"') q=true; else if(c===','||c===';'){row.push(f);f="";} else if(c==='\n'){row.push(f);rows.push(row);row=[];f="";} else if(c!=='\r') f+=c; }
+  if(f||row.length){row.push(f);rows.push(row);}
+  const h = (rows.shift()||[]).map(x=>x.replace(/^﻿/,"").trim().toLowerCase());
+  return rows.filter(r=>r.some(v=>v.trim())).map(r=>Object.fromEntries(h.map((k,i)=>[k,(r[i]||"").trim()])));
+}
+async function importar(){
+  const file = $("imp-file").files[0]; if(!file){ alert("Elige un archivo CSV"); return; }
+  const filas = parseCSV(await file.text());
+  const g = {};
+  for(const r of filas){
+    const osen = (r.osen||"").trim();
+    if(!osen){ alert("Hay filas sin OSEN. La OSEN es obligatoria."); return; }
+    (g[osen] ||= {osen, empresa:r.empresa||"Liumaq", prioridad:(r.prioridad||"normal").toLowerCase(), partidas:[]})
+      .partidas.push({descripcion:r.descripcion, no_parte:r.no_parte, cantidad:r.cantidad||1, moneda:(r.moneda||"MXN").toUpperCase(), precio:r.precio||0});
+  }
+  try{ const n = await rpc("importar_solicitudes",{p_token:S.token,p:Object.values(g)}); cerrarModal(); await recargar(); aviso(`${n} solicitud(es) importadas.`, true); }
+  catch(e){ alert(e.message); }
+}
+
+// ---------- ADMIN ----------
+let ADM = {sec:"pedidos", usuarios:[]};
+function vAdmin(){
+  const secs = [["pedidos","Pedidos"],["usuarios","Usuarios y roles"],["config","Tipo de cambio y montos"]];
+  return `<div class="side"><div class="menu">${secs.map(([k,t])=>`<button class="cond ${ADM.sec===k?'on':''}" onclick="ADM.sec='${k}';render()">${t}</button>`).join("")}</div>
+  <div class="card" id="adm-body"><div class="empty">Cargando…</div></div></div>`;
+}
+async function adminCargar(){
+  const b = $("adm-body");
+  if(ADM.sec==="pedidos"){
+    b.innerHTML = `<h2>Pedidos</h2>` + tablaLista("adm", DATA, s=>`<button class="ghost sm" onclick="adminEditar(${s.id})">Editar</button> <button class="ghost sm bad" onclick="adminBorrar(${s.id},'${esc(s.folio)}')">Borrar</button>`);
+  }else if(ADM.sec==="usuarios"){
+    try{ ADM.usuarios = await rpc("admin_usuarios",{p_token:S.token}); }catch(e){ b.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+    b.innerHTML = `<h2>Usuarios y roles</h2><div class="tbl"><table><thead><tr><th>Nombre</th><th>Puesto</th><th>Permisos</th><th>Activo</th><th></th></tr></thead><tbody>
+    ${ADM.usuarios.map(u=>`<tr><td>${esc(u.nombre)}</td><td>${esc(u.puesto||"")}</td><td>${u.permisos.map(p=>esc(PERMISOS[p]||p)).join(", ")}</td><td>${u.activo?"Sí":"No"}</td>
+     <td><button class="ghost sm" onclick="adminUsuario(${u.id})">Editar</button></td></tr>`).join("")}</tbody></table></div><br>
+    <button class="btn" onclick="adminUsuario(null)">+ Nuevo usuario</button>`;
+  }else{
+    b.innerHTML = `<h2>Tipo de cambio y montos</h2>
+    <p>Tipo de cambio actual: <b>$${esc(TC.valor||"—")}</b> (${fecha(TC.fecha)}, ${esc(TC.fuente||"")}). Se actualiza solo cada día desde Banxico (el mismo que publica el DOF).</p>
+    <div class="g"><div><label>Poner tipo de cambio de hoy a mano</label><input id="a-tc" type="number" step="0.0001" placeholder="${esc(TC.valor||"")}"></div>
+    <div><label>Monto que requiere aprobación (USD)</label><input id="a-um" type="number" value="${esc(TC.umbral_usd||10000)}"></div>
+    <div><label>Nuevo código maestro (opcional)</label><input id="a-ma" type="password"></div></div><br>
+    <button class="btn" onclick="adminGuardarConfig()">Guardar</button>`;
+  }
+}
+async function adminGuardarConfig(){
+  try{ await rpc("admin_config",{p_token:S.token,p_umbral:$("a-um").value||null,p_tc:$("a-tc").value||null,p_maestra:$("a-ma").value||null});
+    await recargar(); aviso("Guardado.", true); }catch(e){ aviso(e.message); }
+}
+function adminUsuario(id){
+  const u = ADM.usuarios.find(x=>x.id===id) || {nombre:"",puesto:"",permisos:["solicitar"],activo:true};
+  abrirModal(`<h2>${id?"Editar":"Nuevo"} usuario</h2><div class="g">
+  <div><label>Nombre</label><input id="u-n" value="${esc(u.nombre)}"></div><div><label>Puesto</label><input id="u-p" value="${esc(u.puesto||"")}"></div>
+  <div><label>${id?"Nuevo código (vacío = no cambia)":"Código"}</label><input id="u-c" type="password"></div></div>
+  <label>Permisos</label>${Object.entries(PERMISOS).map(([k,v])=>`<label class="chk"><input type="checkbox" class="u-perm" value="${k}" ${u.permisos.includes(k)?"checked":""}>${v}</label>`).join("")}
+  <label class="chk"><input type="checkbox" id="u-a" ${u.activo?"checked":""}>Activo</label><br><br>
+  <button class="btn" onclick="adminGuardarUsuario(${id})">Guardar</button> <button class="ghost" onclick="cerrarModal()">Cancelar</button>`);
+}
+async function adminGuardarUsuario(id){
+  const p = {id, nombre:$("u-n").value.trim(), puesto:$("u-p").value.trim(), codigo:$("u-c").value,
+    permisos:[...document.querySelectorAll(".u-perm:checked")].map(x=>x.value), activo:$("u-a").checked};
+  if(!p.nombre){ alert("Pon el nombre"); return; }
+  try{ await rpc("admin_guardar_usuario",{p_token:S.token,p}); cerrarModal(); adminCargar(); aviso("Usuario guardado.", true); }catch(e){ alert(e.message); }
+}
+function adminEditar(id){
+  const s = DATA.find(x=>x.id===id);
+  abrirModal(`<h2>Editar ${esc(s.folio)}</h2><div class="g">
+  <div><label>Empresa</label><select id="e-emp">${EMPRESAS.map(e=>`<option ${s.empresa===e?"selected":""}>${e}</option>`).join("")}</select></div>
+  <div><label>OSEN *</label><input id="e-osen" value="${esc(s.osen)}"></div>
+  <div><label>Prioridad</label><select id="e-pri"><option value="normal">Normal</option><option value="urgente" ${s.prioridad==="urgente"?"selected":""}>Urgente</option></select></div>
+  <div><label>Fecha requerida</label><input id="e-fr" type="date" value="${esc(s.fecha_requerida||"")}"></div>
+  <div><label>Tipo</label><select id="e-tipo"><option value="">—</option><option value="local" ${s.tipo==="local"?"selected":""}>Local</option><option value="internacional" ${s.tipo==="internacional"?"selected":""}>Internacional</option></select></div>
+  <div><label>Proveedor</label><input id="e-prov" value="${esc(s.proveedor||"")}"></div>
+  <div><label>Estatus</label><select id="e-est">${Object.entries(ESTATUS).map(([k,v])=>`<option value="${k}" ${s.estatus===k?"selected":""}>${v}</option>`).join("")}</select></div>
+  <div><label>Tipo de cambio</label><input id="e-tc" type="number" step="0.0001" value="${esc(s.tc||"")}"></div></div>
+  <label>Partidas</label><div class="tbl"><table><thead><tr><th>Descripción</th><th>No. parte</th><th>Cant.</th><th>Recibido</th><th>Moneda</th><th>Precio</th><th></th></tr></thead><tbody id="e-parts">
+  ${s.partidas.map(p=>filaEdit(p)).join("")}</tbody></table></div><br>
+  <button class="ghost" onclick="$('e-parts').insertAdjacentHTML('beforeend', filaEdit({}))">+ Partida</button>
+  <label>Notas</label><textarea id="e-notas" rows="2">${esc(s.notas||"")}</textarea><br><br>
+  <button class="btn" onclick="adminGuardarSol(${id})">Guardar</button> <button class="ghost" onclick="cerrarModal()">Cancelar</button>`);
+}
+function filaEdit(p){
+  return `<tr><td><input class="ed" value="${esc(p.descripcion||"")}"></td><td><input class="en" value="${esc(p.no_parte||"")}"></td>
+  <td><input class="ec" type="number" step="any" value="${p.cantidad??1}"></td><td><input class="er" type="number" step="any" value="${p.cantidad_recibida??0}"></td>
+  <td><select class="em"><option ${p.moneda!=="USD"?"selected":""}>MXN</option><option ${p.moneda==="USD"?"selected":""}>USD</option></select></td>
+  <td><input class="ep" type="number" step="any" value="${p.precio??0}"></td><td><button class="ghost sm" onclick="this.closest('tr').remove()">✕</button></td></tr>`;
+}
+async function adminGuardarSol(id){
+  const partidas = [...$("e-parts").querySelectorAll("tr")].map(tr=>({descripcion:tr.querySelector(".ed").value.trim(), no_parte:tr.querySelector(".en").value,
+    cantidad:tr.querySelector(".ec").value, cantidad_recibida:tr.querySelector(".er").value, moneda:tr.querySelector(".em").value, precio:tr.querySelector(".ep").value})).filter(p=>p.descripcion);
+  const p = {id, empresa:$("e-emp").value, osen:$("e-osen").value, prioridad:$("e-pri").value, fecha_requerida:$("e-fr").value, tipo:$("e-tipo").value,
+    proveedor:$("e-prov").value, estatus:$("e-est").value, tc:$("e-tc").value, notas:$("e-notas").value, partidas};
+  if(!p.osen.trim()){ alert("La OSEN es obligatoria"); return; }
+  try{ await rpc("admin_guardar_solicitud",{p_token:S.token,p}); cerrarModal(); await recargar(); aviso("Pedido guardado.", true); }catch(e){ alert(e.message); }
+}
+async function adminBorrar(id, folio){
+  if(!confirm(`¿Borrar ${folio} definitivamente?`)) return;
+  try{ await rpc("admin_borrar_solicitud",{p_token:S.token,p_id:id}); await recargar(); aviso("Borrado.", true); }catch(e){ aviso(e.message); }
+}
+
+// ---------- inicio ----------
+(function(){
+  try{ S = JSON.parse(sessionStorage.getItem("liumaq_req")); }catch(e){ S = null; }
+  if(S && S.token) arrancar(); else initLogin();
+})();
+</script>
+</body>
+</html>
