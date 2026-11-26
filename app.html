@@ -83,6 +83,7 @@ td input,td select{padding:6px;font-size:13px}
     <label>Usuario</label><select id="l-user"></select>
     <label>Código</label><input type="password" id="l-code" onkeydown="if(event.key==='Enter')entrar()">
     <br><br><button class="btn" style="width:100%" onclick="entrar()">Entrar</button>
+    <p><button type="button" class="ghost" onclick="registroUI()">Registrarme</button></p>
     <p class="mut" id="l-tc"></p>
   </div>
 
@@ -149,6 +150,39 @@ async function entrar(){
     $("l-code").value = "";
     arrancar();
   }catch(e){ aviso(e.message); }
+}
+function registroUI(){
+  abrirModal(`<h2>Registrarme</h2>
+    <p class="mut">Un administrador revisará tu solicitud y asignará tus permisos. Cuando te autorice, tu nombre aparecerá en la lista de inicio de sesión.</p>
+    <form id="registro-form" onsubmit="event.preventDefault();solicitarAcceso(this)">
+      <div class="g">
+        <div><label for="r-nombre">Nombre completo</label><input id="r-nombre" name="nombre" autocomplete="name" required minlength="2" maxlength="100"></div>
+        <div><label for="r-correo">Correo de trabajo</label><input id="r-correo" name="correo" type="email" autocomplete="email" required maxlength="254"></div>
+        <div><label for="r-puesto">Puesto</label><input id="r-puesto" name="puesto" autocomplete="organization-title" required minlength="2" maxlength="100"></div>
+        <div><label for="r-clave">Elige tu código de acceso</label><input id="r-clave" name="codigo" type="password" autocomplete="new-password" required minlength="8" maxlength="72"></div>
+        <div><label for="r-confirmar">Repite tu código</label><input id="r-confirmar" name="confirmar" type="password" autocomplete="new-password" required minlength="8" maxlength="72"></div>
+      </div>
+      <p id="r-error" role="status" class="mut"></p>
+      <button class="btn" type="submit">Solicitar acceso</button> <button class="ghost" type="button" onclick="cerrarModal()">Cancelar</button>
+    </form>`);
+}
+async function solicitarAcceso(form){
+  const boton = form.querySelector('[type="submit"]');
+  if(boton.disabled || !form.reportValidity()) return;
+  const datos = new FormData(form);
+  const error = form.querySelector("#r-error");
+  if(datos.get("codigo")!==datos.get("confirmar")){
+    error.textContent = "Los códigos deben coincidir.";
+    return;
+  }
+  boton.disabled = true;
+  try{
+    await rpc("solicitar_acceso",{p_nombre:datos.get("nombre"),p_correo:datos.get("correo"),p_puesto:datos.get("puesto"),p_codigo:datos.get("codigo")});
+    if(!form.isConnected) return;
+    cerrarModal();
+    aviso("Solicitud registrada. Si tu acceso está pendiente, espera la autorización del administrador.",true);
+  }catch(e){ error.textContent = e.message; }
+  finally{ boton.disabled = false; }
 }
 function salir(){ sessionStorage.removeItem("liumaq_req"); S=null; location.reload(); }
 
@@ -760,9 +794,9 @@ async function importar(){
 }
 
 // ---------- ADMIN ----------
-let ADM = {sec:"pedidos", usuarios:[]};
+let ADM = {sec:"pedidos", usuarios:[], registros:[]};
 function vAdmin(){
-  const secs = [["pedidos","Pedidos"],["usuarios","Usuarios y roles"],["config","Tipo de cambio y montos"]];
+  const secs = [["pedidos","Pedidos"],["registros","Solicitudes de acceso"],["usuarios","Usuarios y roles"],["config","Tipo de cambio y montos"]];
   return `<div class="side"><div class="menu">${secs.map(([k,t])=>`<button class="cond ${ADM.sec===k?'on':''}" onclick="ADM.sec='${k}';render()">${t}</button>`).join("")}</div>
   <div class="card" id="adm-body"><div class="empty">Cargando…</div></div></div>`;
 }
@@ -770,6 +804,8 @@ async function adminCargar(){
   const b = $("adm-body");
   if(ADM.sec==="pedidos"){
     b.innerHTML = `<h2>Pedidos</h2>` + tablaLista("adm", DATA, s=>`<button class="ghost sm" onclick="adminEditar(${s.id})">Editar</button> <button class="ghost sm bad" onclick="adminBorrar(${s.id},'${esc(s.folio)}')">Borrar</button>`);
+  }else if(ADM.sec==="registros"){
+    await adminCargarRegistros(b);
   }else if(ADM.sec==="usuarios"){
     try{ ADM.usuarios = await rpc("admin_usuarios",{p_token:S.token}); }catch(e){ b.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
     b.innerHTML = `<h2>Usuarios y roles</h2><div class="tbl"><table><thead><tr><th>Nombre</th><th>Puesto</th><th>Permisos</th><th>Activo</th><th></th></tr></thead><tbody>
@@ -784,6 +820,50 @@ async function adminCargar(){
     <div><label>Nuevo código maestro (opcional)</label><input id="a-ma" type="password"></div></div><br>
     <button class="btn" onclick="adminGuardarConfig()">Guardar</button>`;
   }
+}
+async function adminCargarRegistros(contenedor){
+  try{
+    const registros = await rpc("admin_registros",{p_token:S.token});
+    if(!contenedor.isConnected || ADM.sec!=="registros") return;
+    ADM.registros = registros;
+    contenedor.innerHTML = `<h2>Solicitudes de acceso</h2>
+      <button class="ghost sm" onclick="adminCargar()">Actualizar</button>
+      ${registros.length?`<div class="tbl"><table><thead><tr><th>Nombre</th><th>Correo</th><th>Puesto</th><th>Solicitado</th><th></th></tr></thead><tbody>
+        ${registros.map(r=>`<tr><td>${esc(r.nombre)}</td><td>${esc(r.correo)}</td><td>${esc(r.puesto)}</td><td>${fechaHora(r.creado)}</td>
+          <td><button class="btn sm" onclick="revisarRegistro(${Number(r.id)})">Revisar</button></td></tr>`).join("")}
+      </tbody></table></div>`:'<p class="empty">No hay solicitudes pendientes.</p>'}`;
+  }catch(e){
+    if(contenedor.isConnected) contenedor.innerHTML = `<div class="err">${esc(e.message)}</div>`;
+  }
+}
+function revisarRegistro(id){
+  const r = ADM.registros.find(s=>s.id===id);
+  if(!r) return;
+  abrirModal(`<h2>Autorizar acceso</h2><p><b>${esc(r.nombre)}</b> · ${esc(r.puesto)}<br>${esc(r.correo)}</p>
+    <p class="mut">Confirma que reconoces a la persona antes de aprobar. El correo lo capturó el solicitante.</p>
+    <fieldset><legend>Permisos</legend>
+      ${Object.entries(PERMISOS).filter(([clave])=>clave!=="admin").map(([clave,texto])=>`<label class="chk"><input type="checkbox" name="registro-permiso" value="${clave}" ${clave==="solicitar"?"checked":""}>${esc(texto)}</label>`).join("")}
+    </fieldset>
+    <p id="registro-revision-error" role="status" class="mut"></p>
+    <button class="btn" onclick="resolverRegistro(${Number(id)},true,this)">Aprobar acceso</button>
+    <button class="ghost bad" onclick="resolverRegistro(${Number(id)},false,this)">Rechazar</button>
+    <button class="ghost" onclick="cerrarModal()">Cancelar</button>`);
+}
+async function resolverRegistro(id,aprobar,boton){
+  const botones = [...$("modal-body").querySelectorAll("button")];
+  if(boton.disabled) return;
+  const error = $("registro-revision-error");
+  const permisos = [...$("modal-body").querySelectorAll('[name="registro-permiso"]:checked')].map(c=>c.value);
+  if(aprobar && !permisos.length){ error.textContent = "Selecciona al menos un permiso."; return; }
+  if(!aprobar && !confirm("¿Rechazar esta solicitud de acceso?")) return;
+  botones.forEach(b=>b.disabled=true);
+  try{
+    await rpc("admin_resolver_registro",{p_token:S.token,p_id:id,p_aprobar:aprobar,p_permisos:aprobar?permisos:[]});
+    cerrarModal();
+    await adminCargar();
+    aviso(aprobar?"Acceso autorizado.":"Solicitud rechazada.",true);
+  }catch(e){ error.textContent = e.message; }
+  finally{ botones.forEach(b=>b.disabled=false); }
 }
 async function adminGuardarConfig(){
   try{ await rpc("admin_config",{p_token:S.token,p_umbral:$("a-um").value||null,p_tc:$("a-tc").value||null,p_maestra:$("a-ma").value||null});
