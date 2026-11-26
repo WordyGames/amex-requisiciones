@@ -71,7 +71,8 @@ td input,td select{padding:6px;font-size:13px}
 </div>
 
 <div class="wrap">
-  <div id="msg"></div>
+  <div id="msg" role="status" aria-live="polite"></div>
+  <p id="sync" class="mut hidden" role="status"></p>
 
   <div id="v-login" class="login card">
     <h2>Entrar</h2>
@@ -108,7 +109,14 @@ const money = (n, cur="MXN") => (cur==="USD"?"US$":"$") + (Number(n)||0).toLocal
 const fecha = d => d ? String(d).slice(0,10).split("-").reverse().join("/") : "—";
 const tiene = p => S && (S.permisos.includes(p) || S.permisos.includes("admin"));
 const pill = st => `<span class="p st-${esc(st)}">${esc(ESTATUS[st]||st)}</span>`;
-function aviso(t, ok){ $("msg").innerHTML = t ? `<div class="${ok?'okmsg':'err'}">${esc(t)}</div>` : ""; if(t) setTimeout(()=>{ if($("msg").textContent===t) $("msg").innerHTML=""; }, 5000); }
+function aviso(t, ok){
+  if(!t){ $("msg").replaceChildren(); return; }
+  const mensaje = document.createElement("div");
+  mensaje.className = ok ? "okmsg" : "err";
+  mensaje.textContent = t;
+  $("msg").append(mensaje);
+  setTimeout(()=>mensaje.remove(), 5000);
+}
 async function rpc(fn, args){ const {data,error} = await sb.rpc(fn, args); if(error) throw new Error(error.message); return data; }
 function cerrarModal(){ $("modal").classList.add("hidden"); }
 function abrirModal(html){ $("modal-body").innerHTML = html; $("modal").classList.remove("hidden"); }
@@ -133,13 +141,15 @@ async function entrar(){
 function salir(){ sessionStorage.removeItem("liumaq_req"); S=null; location.reload(); }
 
 // ---------- navegación ----------
+const pendienteRecepcion = s => ["comprado","en_transito","parcial"].includes(s.estatus);
+const cantidadPendiente = n => n===1 ? "1 pedido pendiente" : `${n} pedidos pendientes`;
 function menu(){
   const m = [];
   if(tiene("solicitar")) m.push(["nueva","+ Nueva solicitud"],["mias","Mis solicitudes"]);
   if(tiene("aprobar")) m.push(["aprobar","Por aprobar", DATA.filter(s=>s.estatus==="por_aprobar").length]);
   if(tiene("comprar")) m.push(["comprar","Por comprar", DATA.filter(s=>s.estatus==="por_comprar").length]);
   else if(tiene("comprar_local")) m.push(["local","Compras locales", DATA.filter(esLocalPendiente).length]);
-  if(tiene("recibir")) m.push(["recibir","Por recibir", DATA.filter(s=>["comprado","en_transito","parcial"].includes(s.estatus)).length]);
+  if(tiene("recibir")) m.push(["recibir","Por recibir"]);
   if(tiene("consulta") || tiene("comprar")) m.push(["osen","Pedidos por OSEN"]);
   if(S.permisos.includes("admin")) m.push(["admin","Admin"]);
   return m;
@@ -150,32 +160,63 @@ function pintarTabs(){
   const m = menu();
   if(!m.find(x=>x[0]===vista)) vista = m[0]?.[0];
   $("tabs").innerHTML = m.map(([id,t,n])=>`<button class="tab ${id===vista?'on':''}" onclick="ir('${id}')">${esc(t)}${n?`<span class="n">${n}</span>`:""}</button>`).join("");
-  const avisosOn = localStorage.getItem("liumaq_avisos")==="1" && (!("Notification" in window) || Notification.permission==="granted");
-  $("who").innerHTML = `${esc(S.nombre)}${TC.valor?` · TC $${TC.valor}`:""}
-    <a onclick="activarAvisos()">${avisosOn?"Avisos activos":"Activar avisos"}</a><a onclick="salir()">Salir</a>`;
+  const noLeidos = bandeja.avisos.filter(a=>!a.leido).length;
+  $("who").innerHTML = `${esc(S.nombre)}${TC.valor?` · TC $${esc(TC.valor)} · ${esc(TC.fuente||"Fuente sin indicar")} (${fecha(TC.fecha)})`:""}
+    <button class="ghost sm" onclick="abrirAvisos()">🔔 Avisos${noLeidos?` (${noLeidos})`:""}</button>
+    <button class="ghost sm" onclick="salir()">Salir</button>`;
 }
 function ir(id){ vista = id; aviso(""); render(); }
 
 async function arrancar(){
+  cargarBandeja();
   $("v-login").classList.add("hidden"); $("v-app").classList.remove("hidden");
   await recargar();
 }
 // ---------- avisos (notificaciones + sonido) ----------
-let PREV = null, audioCtx = null, poll = null;
+let PREV = null, audioCtx = null, poll = null, ultimaCarga = null, solicitudCarga = 0;
+let bandeja = {avisos:[], previo:null, sonido:false};
+const claveBandeja = () => "liumaq_avisos_v2:" + S.nombre;
+function cargarBandeja(){
+  try{
+    const guardada = JSON.parse(localStorage.getItem(claveBandeja()));
+    if(Array.isArray(guardada?.avisos)) bandeja = guardada;
+  }catch(e){}
+  if(bandeja.previo) PREV = {pend:new Set(bandeja.previo.pend), est:bandeja.previo.est};
+}
+function guardarBandeja(){
+  try{ localStorage.setItem(claveBandeja(), JSON.stringify(bandeja)); }catch(e){}
+}
+function abrirAvisos(){
+  bandeja.avisos.forEach(a=>a.leido=true);
+  guardarBandeja();
+  pintarTabs();
+  abrirModal(`<h2>Avisos</h2>
+    <button class="ghost sm" onclick="alternarSonido()">Sonido ${bandeja.sonido?"activado":"desactivado"}</button>
+    ${bandeja.avisos.length?'<ul>'+bandeja.avisos.map(a=>`<li><button class="ghost sm" onclick="verSolicitud(${Number(a.id)})">${esc(a.texto)}</button></li>`).join("")+'</ul>':'<p class="mut">No hay avisos.</p>'}
+    <button class="ghost sm" onclick="cerrarModal()">Cerrar</button>`);
+}
 function misPendientes(){
   const ids = new Set();
   DATA.forEach(s=>{
     if(tiene("aprobar") && s.estatus==="por_aprobar") ids.add(s.id);
     if(tiene("comprar") && s.estatus==="por_comprar") ids.add(s.id);
     else if(tiene("comprar_local") && s.estatus==="por_comprar" && (!s.tipo||s.tipo==="local")) ids.add(s.id);
-    if(tiene("recibir") && ["comprado","en_transito"].includes(s.estatus)) ids.add(s.id);
+    if(tiene("recibir") && pendienteRecepcion(s)) ids.add(s.id);
   });
   return ids;
 }
-function activarAvisos(){
-  try{ audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)(); audioCtx.resume(); }catch(e){}
-  if("Notification" in window && Notification.permission==="default") Notification.requestPermission().then(pintarTabs);
-  sonar(); localStorage.setItem("liumaq_avisos","1"); pintarTabs();
+async function alternarSonido(){
+  if(bandeja.sonido) bandeja.sonido = false;
+  else{
+    try{
+      audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)();
+      await audioCtx.resume();
+      bandeja.sonido = true;
+      sonar();
+    }catch(e){ aviso("El navegador no pudo activar el sonido."); }
+  }
+  guardarBandeja();
+  abrirAvisos();
 }
 function sonar(){
   try{
@@ -186,52 +227,84 @@ function sonar(){
       o.start(audioCtx.currentTime+t); o.stop(audioCtx.currentTime+t+0.17); });
   }catch(e){}
 }
-function avisar(titulo, cuerpo){
-  sonar();
+function avisar(titulo, solicitudes){
+  const avisos = solicitudes.map(s=>({id:s.id, texto:`${s.folio} · ${s.osen} · ${ESTATUS[s.estatus]}${s.prioridad==="urgente"?" · URGENTE":""}`, leido:false}));
+  bandeja.avisos = [...avisos,...bandeja.avisos].slice(0,100);
+  const cuerpo = avisos.slice(0,3).map(a=>a.texto).join(" · ");
+  if(bandeja.sonido) sonar();
   aviso(titulo + ": " + cuerpo, true);
-  if("Notification" in window && Notification.permission==="granted"){
-    try{ const n = new Notification(titulo, {body:cuerpo, tag:"liumaq-"+Date.now()}); n.onclick=()=>{window.focus();n.close();}; }catch(e){}
-  }
 }
 function revisarAvisos(){
   const pend = misPendientes(), est = Object.fromEntries(DATA.map(s=>[s.id,s.estatus]));
   if(PREV){
     const nuevos = DATA.filter(s=>pend.has(s.id) && !PREV.pend.has(s.id));
-    if(nuevos.length) avisar(nuevos.length===1?"Nuevo pendiente":`${nuevos.length} nuevos pendientes`,
-      nuevos.slice(0,3).map(s=>`${s.folio} · ${s.osen} · ${ESTATUS[s.estatus]}${s.prioridad==="urgente"?" · URGENTE":""}`).join("\n"));
-    const mios = DATA.filter(s=>s.solicita_nombre===S.nombre && PREV.est[s.id] && PREV.est[s.id]!==s.estatus);
-    if(mios.length) avisar("Tu solicitud cambió", mios.slice(0,3).map(s=>`${s.folio} · ${s.osen} → ${ESTATUS[s.estatus]}`).join("\n"));
+    if(nuevos.length) avisar(nuevos.length===1?"Nuevo pendiente":`${nuevos.length} nuevos pendientes`, nuevos);
+    const mios = DATA.filter(s=>s.solicita_nombre===S.nombre && PREV.est[s.id] && PREV.est[s.id]!==s.estatus && !nuevos.includes(s));
+    if(mios.length) avisar("Tu solicitud cambió", mios);
   }
   PREV = {pend, est};
-  document.title = (pend.size?`(${pend.size}) `:"") + "Liumaq · Requisiciones";
+  bandeja.previo = {pend:[...pend], est};
+  guardarBandeja();
+}
+function estadoCarga(error){
+  const estado = $("sync");
+  estado.classList.toggle("hidden", !error && !ultimaCarga);
+  const hora = ultimaCarga?.toLocaleTimeString("es-MX",{hour:"2-digit",minute:"2-digit"});
+  estado.textContent = error ? `No se pudieron actualizar los pedidos.${hora?` Última actualización ${hora}.`:""}` : `Actualizado a las ${hora}`;
+  if(error){
+    const reintentar = document.createElement("button");
+    reintentar.className = "ghost sm";
+    reintentar.textContent = "Reintentar";
+    reintentar.onclick = sondeo;
+    estado.append(" ",reintentar);
+  }
+}
+async function cargarDatos(){
+  const numero = ++solicitudCarga;
+  try{
+    const [solicitudes, tipoCambio] = await Promise.all([rpc("listar_solicitudes",{p_token:S.token}), rpc("tc_actual")]);
+    if(numero!==solicitudCarga || !S) return false;
+    DATA = solicitudes;
+    TC = tipoCambio;
+    ultimaCarga = new Date();
+    estadoCarga(false);
+    revisarAvisos();
+    return true;
+  }catch(e){
+    if(numero!==solicitudCarga) return false;
+    estadoCarga(true);
+    if(/Sesión|expirada/i.test(e.message)){
+      clearInterval(poll);
+      sessionStorage.removeItem("liumaq_req");
+      aviso("Tu sesión expiró, vuelve a entrar.");
+      setTimeout(()=>location.reload(),1500);
+    }
+    return false;
+  }
 }
 async function sondeo(){
-  if(!S) return;
-  try{
-    [DATA, TC] = await Promise.all([rpc("listar_solicitudes",{p_token:S.token}), rpc("tc_actual")]);
-    revisarAvisos();
-    const ocupado = vista==="nueva" || !$("modal").classList.contains("hidden") || ["INPUT","TEXTAREA","SELECT"].includes(document.activeElement?.tagName);
-    if(ocupado) pintarTabs(); else render();
-  }catch(e){}
+  if(!S || !await cargarDatos()) return;
+  const ocupado = vista==="nueva" || vista==="admin" || !$("modal").classList.contains("hidden") || ["INPUT","TEXTAREA","SELECT"].includes(document.activeElement?.tagName);
+  if(ocupado) pintarTabs(); else render();
 }
 
 async function recargar(){
-  try{
-    [DATA, TC] = await Promise.all([rpc("listar_solicitudes",{p_token:S.token}), rpc("tc_actual")]);
-    revisarAvisos();
-    if(!poll) poll = setInterval(sondeo, 30000);
-    render();
-  }catch(e){
-    if(/Sesión|expirada/i.test(e.message)){ aviso("Tu sesión expiró, vuelve a entrar."); sessionStorage.removeItem("liumaq_req"); setTimeout(()=>location.reload(),1500); }
-    else aviso(e.message);
-  }
+  if(!poll) poll = setInterval(sondeo, 30000);
+  if(await cargarDatos()) render();
 }
 function render(){
   pintarTabs();
+  const filtros = Object.fromEntries([...$("v-app").querySelectorAll('[id^="f-"]')]
+    .map(campo=>[campo.id,campo.value]));
   const v = {nueva:vNueva, mias:vMias, aprobar:vAprobar, comprar:vComprar, local:vLocal, recibir:vRecibir, osen:vOsen, admin:vAdmin}[vista];
   $("v-app").innerHTML = v ? v() : '<div class="empty">Sin opciones para tu usuario.</div>';
   if(vista==="nueva") filaPartida();
   if(vista==="admin") adminCargar();
+  for(const [id,valor] of Object.entries(filtros)){
+    if($(id)) $(id).value = valor;
+  }
+  if(vista==="osen") pintarOsen();
+  else if(LISTAS[vista] && $("t-"+vista)) render2(vista);
 }
 
 // ---------- nueva solicitud ----------
@@ -285,6 +358,11 @@ function aplicaFiltro(list, id){
 }
 const LISTAS = {};
 function tablaLista(id, list, acciones){
+  if(["aprobar","comprar","local","recibir"].includes(id)){
+    list = [...list].sort((a,b)=>Number(b.prioridad==="urgente")-Number(a.prioridad==="urgente")
+      || String(a.fecha_requerida||"9999").localeCompare(String(b.fecha_requerida||"9999"))
+      || String(a.created_at).localeCompare(String(b.created_at)));
+  }
   LISTAS[id] = {list, acciones};
   return filtroBar(id) + `<div class="tbl" id="t-${id}">${tablaHTML(list, acciones)}</div>`;
 }
@@ -294,9 +372,9 @@ function tablaHTML(list, acciones){
   return `<table><thead><tr><th>Folio</th><th>OSEN</th><th>Fecha</th><th>Solicita</th><th>Partidas</th><th>Proveedor</th><th style="text-align:right">Total</th><th>Estatus</th><th></th></tr></thead><tbody>
   ${list.map(s=>`<tr>
     <td><span class="lnk" onclick="verSolicitud(${s.id})">${esc(s.folio)}</span>${s.prioridad==="urgente"?' <span class="p urg">URGENTE</span>':""}</td>
-    <td><span class="lnk" onclick="verOsen('${esc(s.osen)}')">${esc(s.osen)}</span></td>
-    <td>${fecha(s.created_at)}</td><td>${esc(s.solicita_nombre||"—")}</td>
-    <td>${(s.partidas||[]).slice(0,2).map(p=>esc(p.descripcion)).join(", ")}${s.partidas.length>2?` +${s.partidas.length-2}`:""}</td>
+    <td><button class="ghost sm" data-osen="${esc(s.osen)}" onclick="verOsen(this.dataset.osen)">${esc(s.osen)}</button></td>
+    <td>${fecha(s.created_at)}${s.fecha_requerida?`<div class="mut">Requerida ${fecha(s.fecha_requerida)}</div>`:""}</td><td>${esc(s.solicita_nombre||"—")}</td>
+    <td>${(s.partidas||[]).slice(0,2).map(p=>esc(p.descripcion)+(vista==="recibir"?` · Faltan ${Math.max(0,Number(p.cantidad)-Number(p.cantidad_recibida||0))}`:"")).join(", ")}${(s.partidas||[]).length>2?` +${s.partidas.length-2}`:""}</td>
     <td>${esc(s.proveedor||"—")}${s.tipo?`<div class="mut">${esc(s.tipo)}</div>`:""}</td>
     <td style="text-align:right;white-space:nowrap">${money(s.total_mxn)}<div class="mut">${money(s.total_usd,"USD")}</div></td>
     <td>${pill(s.estatus)}</td>
@@ -316,6 +394,7 @@ function vAprobar(){
 async function aprobar(id, ok){
   const c = prompt(ok ? "Comentario (opcional):" : "Motivo del rechazo:");
   if(c===null) return;
+  if(!ok && !c.trim()){ aviso("Indica el motivo del rechazo."); return; }
   try{ await rpc("aprobar_solicitud",{p_token:S.token,p_id:id,p_ok:ok,p_comentario:c}); await recargar(); aviso(ok?"Aprobada.":"Rechazada.", true); }
   catch(e){ aviso(e.message); }
 }
@@ -348,8 +427,8 @@ async function guardarCompra(id){
   catch(e){ aviso(e.message); cerrarModal(); }
 }
 function vRecibir(){
-  const l = DATA.filter(s=>["comprado","en_transito","parcial"].includes(s.estatus));
-  return `<div class="card"><h2>Por recibir</h2>${tablaLista("recibir", l, s=>`<button class="btn sm" onclick="recibirUI(${s.id})">Recibir</button>`)}</div>`;
+  const l = DATA.filter(pendienteRecepcion);
+  return `<div class="card"><h2>Por recibir</h2><p class="mut">${cantidadPendiente(l.length)}</p>${tablaLista("recibir", l, s=>`<button class="btn sm" onclick="recibirUI(${s.id})">Recibir</button>`)}</div>`;
 }
 function recibirUI(id){
   const s = DATA.find(x=>x.id===id);
@@ -357,17 +436,25 @@ function recibirUI(id){
   <div class="tbl"><table><thead><tr><th>Descripción</th><th>No. parte</th><th>Pedido</th><th>Ya recibido</th><th>Llegó ahora</th></tr></thead><tbody>
   ${s.partidas.map(p=>{const f=p.cantidad-p.cantidad_recibida;return `<tr data-id="${p.id}"><td>${esc(p.descripcion)}</td><td>${esc(p.no_parte||"")}</td><td>${p.cantidad}</td><td>${p.cantidad_recibida}</td>
    <td><input class="rc" type="number" min="0" max="${f}" step="any" value="${f}"></td></tr>`}).join("")}</tbody></table></div><br>
-  <button class="btn" onclick="guardarRecibo(${id})">Confirmar recepción</button> <button class="ghost" onclick="cerrarModal()">Cancelar</button>`);
+  <button class="btn" onclick="guardarRecibo(${id},this)">Confirmar recepción</button> <button class="ghost" onclick="cerrarModal()">Cancelar</button>`);
 }
-async function guardarRecibo(id){
-  const p = [...document.querySelectorAll("#modal-body tr[data-id]")].map(tr=>({id:+tr.dataset.id,cantidad:tr.querySelector(".rc").value}));
+async function guardarRecibo(id, boton){
+  if(boton.disabled) return;
+  const campos = [...document.querySelectorAll("#modal-body .rc")];
+  if(campos.some(c=>c.value==="" || !c.validity.valid) || !campos.some(c=>Number(c.value)>0)){
+    alert("Captura al menos una cantidad mayor a cero y dentro del saldo de cada partida.");
+    return;
+  }
+  const p = campos.map(c=>({id:+c.closest("tr").dataset.id,cantidad:c.value}));
+  boton.disabled = true;
   try{ await rpc("recibir_solicitud",{p_token:S.token,p_id:id,p}); cerrarModal(); await recargar(); aviso("Recepción guardada.", true); }
-  catch(e){ aviso(e.message); cerrarModal(); }
+  catch(e){ alert(e.message); }
+  finally{ boton.disabled = false; }
 }
 
 // ---------- OSEN (Luis Fuentes) ----------
 function vOsen(){
-  const g = {};
+  const g = Object.create(null);
   DATA.forEach(s=>{ (g[s.osen] ||= []).push(s); });
   const filas = Object.entries(g).map(([osen, l])=>{
     const tot = l.reduce((a,s)=>a+Number(s.total_mxn),0), totU = l.reduce((a,s)=>a+Number(s.total_usd),0);
@@ -392,7 +479,7 @@ function pintarOsen(){
 function osenHTML(f){
   if(!f.length) return '<div class="empty">Sin pedidos.</div>';
   return `<table><thead><tr><th>OSEN</th><th>Pedidos</th><th>Quién</th><th>Última fecha</th><th style="text-align:right">Total</th><th>Avance</th></tr></thead><tbody>
-  ${f.map(r=>`<tr><td><span class="lnk" onclick="verOsen('${esc(r.osen)}')">${esc(r.osen)}</span></td><td>${r.n}</td><td>${esc(r.quien)}</td><td>${fecha(r.ult)}</td>
+  ${f.map(r=>`<tr><td><button class="ghost sm" data-osen="${esc(r.osen)}" onclick="verOsen(this.dataset.osen)">${esc(r.osen)}</button></td><td>${r.n}</td><td>${esc(r.quien)}</td><td>${fecha(r.ult)}</td>
   <td style="text-align:right;white-space:nowrap">${money(r.tot)}<div class="mut">${money(r.totU,"USD")}</div></td>
   <td>${r.rec===r.n?pill("recibido"):r.n===1?pill(r.l[0].estatus):`<span class="p">${r.rec} de ${r.n} recibidos</span>`}</td></tr>`).join("")}</tbody></table>`;
 }
@@ -416,6 +503,7 @@ function verOsen(osen){
 }
 function verSolicitud(id){
   const s = DATA.find(x=>x.id===id);
+  if(!s){ alert("Este pedido ya no está disponible para tu usuario."); return; }
   abrirModal(`<button class="ghost" style="float:right" onclick="cerrarModal()">Cerrar</button><h2>${esc(s.osen)}</h2>${detalleSol(s)}
   <h3>Historial</h3>${(s.eventos||[]).map(e=>`<div class="mut">${new Date(e.created_at).toLocaleString("es-MX")} · ${esc(e.usuario)} ${esc(e.accion)} ${esc(e.detalle||"")}</div>`).join("")||'<div class="mut">—</div>'}`);
 }
@@ -455,13 +543,26 @@ function parseCSV(text){
 async function importar(){
   const file = $("imp-file").files[0]; if(!file){ alert("Elige un archivo CSV"); return; }
   const filas = parseCSV(await file.text());
-  const g = {};
-  for(const r of filas){
+  if(!filas.length){ alert("El CSV no tiene partidas."); return; }
+  const g = Object.create(null);
+  for(const [indice,r] of filas.entries()){
     const osen = (r.osen||"").trim();
     if(!osen){ alert("Hay filas sin OSEN. La OSEN es obligatoria."); return; }
-    (g[osen] ||= {osen, empresa:r.empresa||"Liumaq", prioridad:(r.prioridad||"normal").toLowerCase(), partidas:[]})
-      .partidas.push({descripcion:r.descripcion, no_parte:r.no_parte, cantidad:r.cantidad||1, moneda:(r.moneda||"MXN").toUpperCase(), precio:r.precio||0});
+    const empresa = r.empresa||"Liumaq", prioridad = (r.prioridad||"normal").toLowerCase();
+    const moneda = (r.moneda||"MXN").toUpperCase(), cantidad = Number(r.cantidad||1), precio = Number(r.precio||0);
+    if(!r.descripcion || !EMPRESAS.includes(empresa) || !["normal","urgente"].includes(prioridad) ||
+      !["MXN","USD"].includes(moneda) || !Number.isFinite(cantidad) || cantidad<=0 || !Number.isFinite(precio) || precio<0){
+      alert(`Revisa la partida ${indice+1}: descripción, empresa, prioridad, moneda, cantidad y precio.`);
+      return;
+    }
+    const grupo = g[osen] ||= {osen,empresa,prioridad,partidas:[]};
+    if(grupo.empresa!==empresa || grupo.prioridad!==prioridad){
+      alert(`Las filas de ${osen} deben tener la misma empresa y prioridad.`);
+      return;
+    }
+    grupo.partidas.push({descripcion:r.descripcion, no_parte:r.no_parte, cantidad, moneda, precio});
   }
+  if(!confirm(`Importar ${Object.keys(g).length} solicitud(es) con ${filas.length} partida(s)?`)) return;
   try{ const n = await rpc("importar_solicitudes",{p_token:S.token,p:Object.values(g)}); cerrarModal(); await recargar(); aviso(`${n} solicitud(es) importadas.`, true); }
   catch(e){ alert(e.message); }
 }
