@@ -312,9 +312,14 @@ function estadoCarga(error){
 }
 async function cargarDatos(){
   const numero = ++solicitudCarga;
+  const token = S.token;
   try{
-    const [solicitudes, tipoCambio] = await Promise.all([rpc("listar_solicitudes",{p_token:S.token}), rpc("tc_actual")]);
-    if(numero!==solicitudCarga || !S) return false;
+    const [solicitudes, tipoCambio, sesion] = await Promise.all([
+      rpc("listar_solicitudes",{p_token:token}), rpc("tc_actual"), rpc("sesion_actual",{p_token:token})
+    ]);
+    if(numero!==solicitudCarga || S?.token!==token) return false;
+    S = {...sesion,token};
+    sessionStorage.setItem("liumaq_req",JSON.stringify(S));
     DATA = solicitudes;
     TC = tipoCambio;
     ultimaCarga = new Date();
