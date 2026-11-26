@@ -52,6 +52,23 @@ td input,td select{padding:6px;font-size:13px}
 .mut{color:var(--mut);font-size:13px}
 .notas-osen{margin:6px 0 0;padding:0;list-style:none;min-width:160px;max-width:36ch}
 .notas-osen li{margin-top:4px;white-space:pre-wrap;overflow-wrap:anywhere}
+.tablero-resumen{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0 16px}
+.tablero-resumen button{display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left}
+.tablero-resumen button[aria-pressed="true"]{border-color:var(--o);background:#fff0e6}
+.tablero-pedidos{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:12px}
+.tablero-pedido{display:grid;align-content:start;gap:8px;border:1px solid var(--b);padding:14px;border-radius:3px}
+.tablero-pedido h3,.tablero-pedido p,.tablero-pedido dl,.tablero-pedido dd{margin:0}
+.tablero-pedido dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:5px 10px}
+.tablero-pedido dd{overflow-wrap:anywhere}
+.recepcion-tabla input{min-width:90px}
+@media(max-width:600px){
+  .recepcion-tabla,.recepcion-tabla tbody,.recepcion-tabla tr,.recepcion-tabla td{display:block}
+  .recepcion-tabla thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+  .recepcion-tabla tr{border:1px solid var(--b);margin:8px 0;padding:8px;border-radius:3px}
+  .recepcion-tabla td{display:flex;justify-content:space-between;align-items:center;gap:10px;border:0;padding:5px}
+  .recepcion-tabla td::before{content:attr(data-etiqueta);font-weight:700}
+  .recepcion-tabla td input{width:100px}
+}
 .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:12px}.bar>div{min-width:180px}
 .empty{color:var(--mut);text-align:center;padding:30px}
 .err{background:#fbe4e1;color:var(--bad);padding:10px 14px;border-radius:2px;margin-bottom:12px;font-weight:600}
@@ -192,6 +209,10 @@ function salir(){ sessionStorage.removeItem("liumaq_req"); S=null; location.relo
 // ---------- navegación ----------
 const pendienteRecepcion = s => ["comprado","en_transito","parcial"].includes(s.estatus);
 const puedeRecibir = s => Boolean(s && tiene("recibir") && pendienteRecepcion(s));
+const puedeCorregirRecepcion = s => Boolean(s && tiene("recibir") && ["parcial","recibido"].includes(s.estatus));
+function botonCorregirRecepcion(s){
+  return puedeCorregirRecepcion(s) ? `<button type="button" class="ghost sm" onclick="corregirRecepcionUI(${Number(s.id)})">Corregir recepción</button>` : "";
+}
 function botonCambiarEstatus(s){
   return puedeRecibir(s) ? `<button type="button" class="ghost sm" onclick="recibirUI(${Number(s.id)})">Cambiar estatus</button>` : "";
 }
@@ -199,6 +220,7 @@ const cantidadPendiente = n => n===1 ? "1 pedido pendiente" : `${n} pedidos pend
 function menu(){
   const m = [];
   if(["aprobar","comprar","comprar_local","comprar_internacional","recibir"].some(tiene)) m.push(["trabajo","Mi trabajo"]);
+  m.push(["tablero","Tablero"]);
   if(tiene("solicitar")) m.push(["nueva","+ Nueva solicitud"],["mias","Mis solicitudes"]);
   if(tiene("aprobar")) m.push(["aprobar","Por aprobar", DATA.filter(s=>s.estatus==="por_aprobar").length]);
   if(tiene("comprar")) m.push(["comprar","Por comprar", DATA.filter(s=>s.estatus==="por_comprar" && puedeComprar(s)).length]);
@@ -380,7 +402,7 @@ function render(){
   const posicionTabla = $("t-"+tabla)?.scrollLeft||0;
   const filtros = Object.fromEntries([...$("v-app").querySelectorAll('[id^="f-"]')]
     .map(campo=>[campo.id,campo.value]));
-  const v = {trabajo:vTrabajo, nueva:vNueva, mias:vMias, aprobar:vAprobar, comprar:vComprar, local:vLocal, recibir:vRecibir, osen:vOsen, seguimiento:vSeguimiento, admin:vAdmin}[vista];
+  const v = {trabajo:vTrabajo, tablero:vTablero, nueva:vNueva, mias:vMias, aprobar:vAprobar, comprar:vComprar, local:vLocal, recibir:vRecibir, osen:vOsen, seguimiento:vSeguimiento, admin:vAdmin}[vista];
   $("v-app").innerHTML = v ? v() : '<div class="empty">Sin opciones para tu usuario.</div>';
   if(vista==="nueva") filaPartida();
   if(vista==="admin") adminCargar();
@@ -388,6 +410,7 @@ function render(){
     if($(id)) $(id).value = valor;
   }
   if(vista==="osen") pintarOsen();
+  else if(vista==="tablero") pintarTablero();
   else if(LISTAS[tabla] && $("t-"+tabla)) render2(tabla);
   if($("t-"+tabla)) $("t-"+tabla).scrollLeft = posicionTabla;
   if(foco && $(foco)){
@@ -525,6 +548,64 @@ function fechasPedido(s,hoy){
 function tiempoEnEtapa(inicio){
   const dias = Math.max(0,Math.floor((Date.now()-Date.parse(inicio))/86400000));
   return dias===0 ? "Menos de un día en esta etapa" : dias===1 ? "1 día en esta etapa" : `${dias} días en esta etapa`;
+}
+const pedidoActivo = s => !["recibido","rechazada","cancelada"].includes(s.estatus);
+function responsablePedido(s){
+  if(s.estatus==="por_aprobar") return "Gabriel · Aprobación";
+  if(s.estatus==="por_comprar") return s.tipo==="internacional" ? "Paco · Compras internacionales" : "Compras locales";
+  return pendienteRecepcion(s) ? "Almacén" : "";
+}
+function vTablero(){
+  return `<section class="card"><h2>Tablero de pedidos</h2>
+    <div class="bar"><div><label for="f-tablero">Buscar folio, OSEN, proveedor o partida</label>
+      <input id="f-tablero" oninput="pintarTablero()"></div>
+      <div><label for="f-tablero-estado">Vista</label><select id="f-tablero-estado" onchange="pintarTablero()">
+        <option value="pendientes">Pendientes</option><option value="atrasados">Atrasados</option>
+        <option value="justos">Justos de tiempo</option><option value="urgentes">Urgentes</option>
+        <option value="recibidos">Recibidos</option></select></div></div>
+    <div class="tablero-resumen" id="tablero-resumen"></div>
+    <div class="tablero-pedidos" id="tablero-pedidos"></div>
+  </section>`;
+}
+function filtrarTablero(vistaElegida){
+  $("f-tablero-estado").value = vistaElegida;
+  pintarTablero();
+}
+function pintarTablero(){
+  const hoy = hoyMexico();
+  const pendientes = DATA.filter(pedidoActivo);
+  const grupos = {
+    pendientes,
+    atrasados:pendientes.filter(s=>alertaPlazo(s,hoy)?.clave==="atrasado"),
+    justos:pendientes.filter(s=>alertaPlazo(s,hoy)?.clave==="justo"),
+    urgentes:pendientes.filter(s=>s.prioridad==="urgente"),
+    recibidos:DATA.filter(s=>s.estatus==="recibido")
+  };
+  const nombres = {pendientes:"Pendientes",atrasados:"Atrasados",justos:"Justos de tiempo",urgentes:"Urgentes",recibidos:"Recibidos"};
+  const filtro = $("f-tablero-estado").value;
+  $("tablero-resumen").innerHTML = Object.entries(grupos).map(([clave,pedidos])=>
+    `<button class="ghost" aria-pressed="${filtro===clave}" onclick="filtrarTablero('${clave}')">${nombres[clave]} <strong>${pedidos.length}</strong></button>`).join("");
+  const filas = aplicaFiltro(grupos[filtro]||pendientes,"tablero").slice().sort((a,b)=>
+    Number(b.prioridad==="urgente")-Number(a.prioridad==="urgente") ||
+    String(a.fecha_requerida||"9999").localeCompare(String(b.fecha_requerida||"9999")) ||
+    String(a.created_at).localeCompare(String(b.created_at)));
+  $("tablero-pedidos").innerHTML = filas.length ? filas.map(s=>tarjetaTablero(s,hoy)).join("") : '<p class="empty">No hay pedidos en esta vista.</p>';
+}
+function tarjetaTablero(s,hoy){
+  const faltantes = (s.partidas||[]).filter(p=>Number(p.cantidad)>Number(p.cantidad_recibida||0));
+  const responsable = responsablePedido(s);
+  return `<article class="tablero-pedido">
+    <h3><button class="ghost sm" onclick="verSolicitud(${Number(s.id)})">${esc(s.folio)}</button> · ${esc(s.osen)}</h3>
+    <p>${estatusPedido(s)} ${s.prioridad==="urgente"?'<span class="p urg">Urgente</span>':""}</p>
+    ${fechasPedido(s,hoy)}
+    <dl>
+      ${responsable?`<dt>Siguiente acción</dt><dd>${responsable}</dd>`:""}
+      ${responsable && s.etapa_desde?`<dt>Tiempo en etapa</dt><dd>${tiempoEnEtapa(s.etapa_desde)}</dd>`:`<dt>Último cambio</dt><dd>${fecha(s.updated_at||s.created_at)}</dd>`}
+      ${s.proveedor?`<dt>Proveedor</dt><dd>${esc(s.proveedor)}</dd>`:""}
+      ${faltantes.length && pedidoActivo(s)?`<dt>Material pendiente</dt><dd>${faltantes.slice(0,3).map(p=>`${Number(p.cantidad)-Number(p.cantidad_recibida||0)} × ${esc(p.descripcion)}`).join("<br>")}${faltantes.length>3?`<br>+${faltantes.length-3} partidas`:""}</dd>`:""}
+    </dl>
+    <div>${botonCambiarEstatus(s)} ${botonCorregirRecepcion(s)}</div>
+  </article>`;
 }
 function vTrabajo(){
   const pendientes = DATA.filter(accionTrabajo);
@@ -695,9 +776,9 @@ function recibirUI(id){
   <p class="mut">Captura cuánto llegó de cada partida. Si queda material pendiente, el pedido pasa a Recibido parcial. Si llegó todo, pasa a Recibido.</p>
   <p><button type="button" class="ghost sm" onclick="llenarRecepcion(true)">Llegó todo lo pendiente</button>
   <button type="button" class="ghost sm" onclick="llenarRecepcion(false)">Capturar llegada parcial</button></p>
-  <div class="tbl"><table><thead><tr><th>Descripción</th><th>No. parte</th><th>Pedido</th><th>Ya recibido</th><th>Llegó ahora</th></tr></thead><tbody>
-  ${s.partidas.map(p=>{const f=p.cantidad-p.cantidad_recibida;return `<tr data-id="${p.id}"><td>${esc(p.descripcion)}</td><td>${esc(p.no_parte||"")}</td><td>${p.cantidad}</td><td>${p.cantidad_recibida}</td>
-   <td><input class="rc" type="number" min="0" max="${f}" step="any" value="0"></td></tr>`}).join("")}</tbody></table></div><br>
+  <div class="tbl"><table class="recepcion-tabla"><thead><tr><th>Descripción</th><th>No. parte</th><th>Pedido</th><th>Ya recibido</th><th>Llegó ahora</th></tr></thead><tbody>
+  ${s.partidas.map(p=>{const f=p.cantidad-p.cantidad_recibida;return `<tr data-id="${p.id}"><td data-etiqueta="Descripción">${esc(p.descripcion)}</td><td data-etiqueta="No. parte">${esc(p.no_parte||"—")}</td><td data-etiqueta="Pedido">${p.cantidad}</td><td data-etiqueta="Ya recibido">${p.cantidad_recibida}</td>
+   <td data-etiqueta="Llegó ahora"><input class="rc" aria-label="Llegó ahora: ${esc(p.descripcion)}" type="number" min="0" max="${f}" step="any" value="0"></td></tr>`}).join("")}</tbody></table></div><br>
   <button class="btn" onclick="guardarRecibo(${id},this)">Confirmar recepción</button> <button class="ghost" onclick="cerrarModal()">Cancelar</button>`);
 }
 function llenarRecepcion(completa){
@@ -716,6 +797,43 @@ async function guardarRecibo(id, boton){
   boton.disabled = true;
   try{ await rpc("recibir_solicitud",{p_token:S.token,p_id:id,p}); cerrarModal(); await recargar(); aviso("Recepción guardada.", true); }
   catch(e){ alert(e.message); }
+  finally{ boton.disabled = false; }
+}
+function corregirRecepcionUI(id){
+  const s = DATA.find(p=>p.id===id);
+  if(!puedeCorregirRecepcion(s)){ aviso("Solo se pueden corregir pedidos con una recepción registrada."); return; }
+  abrirModal(`<h2>Corregir recepción · ${esc(s.folio)}</h2>
+    <p>Captura el <b>total realmente recibido</b> en cada partida que quieras corregir. El motivo y las cantidades anteriores y nuevas quedarán en el historial.</p>
+    <form onsubmit="event.preventDefault();guardarCorreccion(${Number(s.id)},this)" data-revision="${esc(s.updated_at)}">
+      <div class="tbl"><table class="recepcion-tabla"><thead><tr><th>Partida</th><th>Pedido</th><th>Recibido actual</th><th>Total recibido correcto</th></tr></thead><tbody>
+      ${s.partidas.map(p=>`<tr><td data-etiqueta="Partida">${esc(p.descripcion)}${p.no_parte?` · ${esc(p.no_parte)}`:""}</td>
+        <td data-etiqueta="Pedido">${esc(p.cantidad)}</td>
+        <td data-etiqueta="Recibido actual">${esc(p.cantidad_recibida??0)}</td>
+        <td data-etiqueta="Total correcto"><input class="corregir-cantidad" data-id="${Number(p.id)}" data-anterior="${esc(p.cantidad_recibida??0)}" aria-label="Total recibido correcto: ${esc(p.descripcion)}" type="number" min="0" max="${esc(p.cantidad)}" step="any" value="${esc(p.cantidad_recibida??0)}" required></td></tr>`).join("")}
+      </tbody></table></div>
+      <label for="motivo-recepcion">Motivo de la corrección</label>
+      <textarea name="motivo" id="motivo-recepcion" rows="2" minlength="3" maxlength="500" required></textarea>
+      <p class="mut" role="status" id="correccion-error"></p>
+      <button class="btn" type="submit">Guardar corrección</button> <button class="ghost" type="button" onclick="cerrarModal()">Cancelar</button>
+    </form>`);
+}
+async function guardarCorreccion(id,form){
+  const boton = form.querySelector('[type="submit"]');
+  if(boton.disabled || !form.reportValidity()) return;
+  const error = form.querySelector("#correccion-error");
+  const motivo = form.elements.motivo.value.trim();
+  const partidas = [...form.querySelectorAll(".corregir-cantidad")]
+    .filter(campo=>Number(campo.value)!==Number(campo.dataset.anterior))
+    .map(campo=>({id:Number(campo.dataset.id),cantidad:campo.value}));
+  if(!partidas.length){ error.textContent = "Cambia la cantidad de al menos una partida."; return; }
+  if(motivo.length<3){ error.textContent = "Escribe el motivo de la corrección."; return; }
+  boton.disabled = true;
+  try{
+    const estado = await rpc("corregir_recepcion",{p_token:S.token,p_id:id,p_revision:form.dataset.revision,p_motivo:motivo,p_partidas:partidas});
+    cerrarModal();
+    await recargar();
+    aviso(`Recepción corregida. Estatus ${ESTATUS[estado]||estado}.`,true);
+  }catch(e){ error.textContent = e.message; }
   finally{ boton.disabled = false; }
 }
 
@@ -757,8 +875,7 @@ function osenHTML(f){
     ${r.l.some(s=>s.estatus==="parcial")?`<span class="p st-parcial">${r.l.filter(s=>s.estatus==="parcial").length} parcial(es)</span>`:""}`}</td></tr>`).join("")}</tbody></table>`;
 }
 function detalleSol(s){
-  const responsable = s.estatus==="por_aprobar" ? "Aprobación" : s.estatus==="por_comprar" ?
-    (s.tipo==="internacional" ? "Compras internacionales · Paco" : "Compras locales") : pendienteRecepcion(s) ? "Almacén" : "";
+  const responsable = responsablePedido(s);
   const accion = accionTrabajo(s);
   const botones = {
     aprobar:`<button class="btn sm" onclick="aprobar(${Number(s.id)},true)">Aprobar</button> <button class="ghost sm bad" onclick="aprobar(${Number(s.id)},false)">Rechazar</button>`,
@@ -766,6 +883,7 @@ function detalleSol(s){
     recibir:botonCambiarEstatus(s)
   };
   return `<h3>${esc(s.folio)} · ${estatusPedido(s)}${s.prioridad==="urgente"?' <span class="p urg">URGENTE</span>':""}</h3>
+  ${puedeCorregirRecepcion(s)?`<p>${botonCorregirRecepcion(s)}</p>`:""}
   ${s.tipo==="internacional"?`<p class="mut">Origen ${esc(s.pais_compra||"Por definir")}${s.compra_iniciada_at?` · Compra iniciada ${fechaHora(s.compra_iniciada_at)}`:""}</p>`:""}
   ${responsable?`<p><b>Siguiente acción</b> · ${responsable} · ${botones[accion]||""}</p>`:""}
   ${fechasPedido(s,hoyMexico())}
