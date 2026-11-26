@@ -100,6 +100,7 @@ const sb = supabase.createClient("https://iwnbscekenptumanpjcs.supabase.co",
 const ESTATUS = {por_aprobar:"Por aprobar",rechazada:"Rechazada",por_comprar:"Por comprar",comprado:"Comprado",
   en_transito:"En tránsito",parcial:"Recibido parcial",recibido:"Recibido",cancelada:"Cancelada"};
 const PERMISOS = {solicitar:"Solicitar",comprar:"Comprar (todo)",comprar_local:"Compra local",recibir:"Recibir (almacén)",aprobar:"Aprobar",consulta:"Consulta",admin:"Admin"};
+const PERMISOS_ADMIN = {...PERMISOS,comprar_internacional:"Compra internacional",seguimiento_internacional:"Seguimiento internacional"};
 const EMPRESAS = ["Liumaq","AMEX Machinery"];
 
 let S = null;            // sesión {token,nombre,permisos}
@@ -191,17 +192,19 @@ const pendienteRecepcion = s => ["comprado","en_transito","parcial"].includes(s.
 const cantidadPendiente = n => n===1 ? "1 pedido pendiente" : `${n} pedidos pendientes`;
 function menu(){
   const m = [];
-  if(["aprobar","comprar","comprar_local","recibir"].some(tiene)) m.push(["trabajo","Mi trabajo"]);
+  if(["aprobar","comprar","comprar_local","comprar_internacional","recibir"].some(tiene)) m.push(["trabajo","Mi trabajo"]);
   if(tiene("solicitar")) m.push(["nueva","+ Nueva solicitud"],["mias","Mis solicitudes"]);
   if(tiene("aprobar")) m.push(["aprobar","Por aprobar", DATA.filter(s=>s.estatus==="por_aprobar").length]);
-  if(tiene("comprar")) m.push(["comprar","Por comprar", DATA.filter(s=>s.estatus==="por_comprar").length]);
+  if(tiene("comprar")) m.push(["comprar","Por comprar", DATA.filter(s=>s.estatus==="por_comprar" && puedeComprar(s)).length]);
   else if(tiene("comprar_local")) m.push(["local","Compras locales", DATA.filter(esLocalPendiente).length]);
   if(tiene("recibir")) m.push(["recibir","Por recibir"]);
   if(tiene("consulta") || tiene("comprar")) m.push(["osen","Pedidos por OSEN"]);
+  if(tiene("seguimiento_internacional")) m.push(["seguimiento","Seguimiento internacional"]);
   if(S.permisos.includes("admin")) m.push(["admin","Admin"]);
   return m;
 }
 const esLocalPendiente = s => ["por_comprar","comprado","en_transito"].includes(s.estatus) && (!s.tipo || s.tipo==="local");
+const puedeComprar = s => s.tipo==="internacional" ? tiene("comprar_internacional") : tiene("comprar")||tiene("comprar_local");
 
 function pintarTabs(){
   const m = menu();
@@ -245,7 +248,7 @@ async function abrirAvisos(){
 }
 function accionTrabajo(s){
   if(s.estatus==="por_aprobar" && tiene("aprobar")) return "aprobar";
-  if(s.estatus==="por_comprar" && (tiene("comprar") || (tiene("comprar_local") && esLocalPendiente(s)))) return "comprar";
+  if(s.estatus==="por_comprar" && puedeComprar(s)) return "comprar";
   if(pendienteRecepcion(s) && tiene("recibir")) return "recibir";
   return "";
 }
@@ -365,7 +368,7 @@ function render(){
   const posicionTabla = $("t-"+tabla)?.scrollLeft||0;
   const filtros = Object.fromEntries([...$("v-app").querySelectorAll('[id^="f-"]')]
     .map(campo=>[campo.id,campo.value]));
-  const v = {trabajo:vTrabajo, nueva:vNueva, mias:vMias, aprobar:vAprobar, comprar:vComprar, local:vLocal, recibir:vRecibir, osen:vOsen, admin:vAdmin}[vista];
+  const v = {trabajo:vTrabajo, nueva:vNueva, mias:vMias, aprobar:vAprobar, comprar:vComprar, local:vLocal, recibir:vRecibir, osen:vOsen, seguimiento:vSeguimiento, admin:vAdmin}[vista];
   $("v-app").innerHTML = v ? v() : '<div class="empty">Sin opciones para tu usuario.</div>';
   if(vista==="nueva") filaPartida();
   if(vista==="admin") adminCargar();
@@ -390,6 +393,7 @@ function vNueva(){
     <div><label>Prioridad</label><select id="n-pri"><option value="normal">Normal</option><option value="urgente">Urgente (equipo parado)</option></select></div>
     <div><label for="n-fecha">Fecha requerida <span class="req">*</span></label><input type="date" id="n-fecha" required></div>
     <div><label for="n-llegada">Llegada tentativa a almacén <span class="req">*</span></label><input type="date" id="n-llegada" required></div>
+    <div><label for="n-origen">Origen de compra</label><select id="n-origen"><option value="">Local</option><option value="USA">USA</option><option value="CHINA">China</option></select></div>
   </div>
   <label>Partidas</label>
   <div class="tbl"><table><thead><tr><th>Descripción *</th><th>No. parte</th><th style="width:80px">Cant.</th><th style="width:90px">Moneda</th><th style="width:120px">Precio estimado</th><th></th></tr></thead><tbody id="n-partidas"></tbody></table></div>
@@ -419,7 +423,7 @@ async function guardarNueva(){
   if(!partidas.length){ aviso("Agrega al menos una partida con descripción."); return; }
   try{
     const r = await rpc("crear_solicitud", {p_token:S.token, p:{empresa:$("n-emp").value, osen, prioridad:$("n-pri").value,
-      fecha_requerida:$("n-fecha").value, fecha_tentativa:$("n-llegada").value, notas:$("n-notas").value, partidas}});
+      fecha_requerida:$("n-fecha").value, fecha_tentativa:$("n-llegada").value, pais_compra:$("n-origen").value, notas:$("n-notas").value, partidas}});
     await recargar(); vista="mias"; render(); aviso(`Solicitud ${r.folio} enviada.`, true);
   }catch(e){ aviso(e.message); }
 }
@@ -438,7 +442,7 @@ function aplicaFiltro(list, id){
     list = list.filter(s=>plazo==="urgente" ? s.prioridad==="urgente" : alertaPlazo(s,hoy)?.clave===plazo);
   }
   if(!t) return list;
-  return list.filter(s => [s.folio,s.osen,s.proveedor,s.solicita_nombre,s.empresa, ...(s.partidas||[]).map(p=>p.descripcion+" "+(p.no_parte||""))].join(" ").toLowerCase().includes(t));
+  return list.filter(s => [s.folio,s.osen,s.proveedor,s.solicita_nombre,s.empresa,s.pais_compra, ...(s.partidas||[]).map(p=>p.descripcion+" "+(p.no_parte||""))].join(" ").toLowerCase().includes(t));
 }
 const LISTAS = {};
 function tablaLista(id, list, acciones){
@@ -462,9 +466,9 @@ function tablaHTML(list, acciones){
     <td><button class="ghost sm" data-osen="${esc(s.osen)}" onclick="verOsen(this.dataset.osen)">${esc(s.osen)}</button></td>
     <td>${fechasPedido(s,hoy)}</td><td>${esc(s.solicita_nombre||"—")}</td>
     <td>${(s.partidas||[]).slice(0,2).map(p=>esc(p.descripcion)+(vista==="recibir"?` · Faltan ${Math.max(0,Number(p.cantidad)-Number(p.cantidad_recibida||0))}`:"")).join(", ")}${(s.partidas||[]).length>2?` +${s.partidas.length-2}`:""}</td>
-    <td>${esc(s.proveedor||"—")}${s.tipo?`<div class="mut">${esc(s.tipo)}</div>`:""}</td>
+    <td>${esc(s.proveedor||"—")}${s.tipo?`<div class="mut">${esc(s.pais_compra||s.tipo)}${s.tipo==="internacional"?` · ${esc(s.comprador_nombre||"Paco")}`:""}</div>`:""}</td>
     <td style="text-align:right;white-space:nowrap">${money(s.total_mxn)}<div class="mut">${money(s.total_usd,"USD")}</div></td>
-    <td>${pill(s.estatus)}${vista==="trabajo" && s.etapa_desde?`<div class="mut">${tiempoEnEtapa(s.etapa_desde)}</div>`:""}</td>
+    <td>${estatusPedido(s)}${vista==="trabajo" && s.etapa_desde?`<div class="mut">${tiempoEnEtapa(s.etapa_desde)}</div>`:""}</td>
     <td style="white-space:nowrap">${acciones?acciones(s):""}</td></tr>`).join("")}</tbody></table>`;
 }
 
@@ -532,7 +536,7 @@ function botonEditarPropia(s){
 function editarPropia(id){
   const s = DATA.find(p=>p.id===id);
   if(!s || !puedeEditarPropia(s)) return;
-  const completa = ["por_aprobar","por_comprar"].includes(s.estatus);
+  const completa = ["por_aprobar","por_comprar"].includes(s.estatus) && !s.compra_iniciada_at;
   abrirModal(`<h2>Editar ${esc(s.folio)}</h2>
     ${completa?'<p class="mut">Al cambiar las partidas se revisará de nuevo si requiere aprobación.</p>':'<p class="mut">Ya hay una compra registrada. Puedes corregir los datos de la solicitud. Para cambios en partidas, cantidades o precios, contacta a Admin.</p>'}
     <div class="g">
@@ -596,18 +600,47 @@ async function aprobar(id, ok){
   catch(e){ aviso(e.message); }
 }
 function vComprar(){
-  const l = DATA.filter(s=>["por_comprar","comprado","en_transito"].includes(s.estatus));
+  const l = DATA.filter(s=>["por_comprar","comprado","en_transito"].includes(s.estatus) && puedeComprar(s));
   return `<div class="card"><h2>Por comprar</h2><p class="mut">Abre el pedido para poner proveedor/DMS, precios y estatus.</p>
-  ${tablaLista("comprar", l, s=>`<button class="btn sm" onclick="compraUI(${s.id})">Comprar</button>`)}</div>`;
+  ${tablaLista("comprar", l, botonesCompra)}</div>`;
+}
+function botonesCompra(s){
+  const editar = `<button class="btn sm" onclick="compraUI(${Number(s.id)})">Comprar</button>`;
+  if(s.tipo!=="internacional" || s.estatus!=="por_comprar" || s.compra_iniciada_at || !s.pais_compra) return editar;
+  return `<button class="ghost sm" onclick="iniciarCompra(${Number(s.id)},this)">Iniciar seguimiento</button> ${editar}`;
+}
+async function iniciarCompra(id,boton){
+  if(boton.disabled) return;
+  boton.disabled = true;
+  try{
+    await rpc("iniciar_compra_internacional",{p_token:S.token,p_id:id});
+    await recargar();
+    aviso("Compra iniciada. Ya aparece en Seguimiento internacional.",true);
+  }catch(e){ aviso(e.message); }
+  finally{ boton.disabled=false; }
+}
+function estatusPedido(s){
+  return s.tipo==="internacional" && s.estatus==="por_comprar" && s.compra_iniciada_at ?
+    '<span class="p st-en_transito">En proceso de compra</span>' : pill(s.estatus);
+}
+function vSeguimiento(){
+  const pedidos = DATA.filter(s=>s.tipo==="internacional" && s.compra_iniciada_at);
+  return `<div class="card"><h2>Seguimiento internacional</h2>${tablaLista("seguimiento",pedidos)}</div>`;
 }
 function vLocal(){
   const l = DATA.filter(esLocalPendiente);
   return `<div class="card"><h2>Compras locales</h2>${tablaLista("local", l, s=>`<button class="btn sm" onclick="compraUI(${s.id})">Comprar</button>`)}</div>`;
 }
 function compraUI(id){
-  const s = DATA.find(x=>x.id===id); const soloLocal = !tiene("comprar");
+  const s = DATA.find(x=>x.id===id);
+  if(!s || !puedeComprar(s)) return;
+  const internacional = s.tipo==="internacional";
+  const elegirPais = tiene("comprar_internacional");
   abrirModal(`<h2>${esc(s.folio)} · ${esc(s.osen)}</h2>
-  <div class="g"><div><label>Tipo</label><select id="c-tipo">${soloLocal?'<option value="local">Local</option>':`<option value="local" ${s.tipo==="local"?"selected":""}>Local</option><option value="internacional" ${s.tipo==="internacional"?"selected":""}>Internacional</option>`}</select></div>
+  <div class="g">${elegirPais?`<div><label for="c-pais">Origen de compra</label><select id="c-pais">
+    ${internacional?'<option value="" disabled>Selecciona el país</option>':'<option value="">Local</option>'}
+    <option value="USA" ${s.pais_compra==="USA"?"selected":""}>USA</option><option value="CHINA" ${s.pais_compra==="CHINA"?"selected":""}>China</option></select></div>`:""}
+  <input type="hidden" id="c-tipo" value="${internacional?"internacional":"local"}">
   <div><label>Proveedor / DMS</label><input id="c-prov" value="${esc(s.proveedor||"")}"></div>
   <div><label>Estatus</label><select id="c-est">${["por_comprar","comprado","en_transito","cancelada"].map(e=>`<option value="${e}" ${s.estatus===e?"selected":""}>${ESTATUS[e]}</option>`).join("")}</select></div></div>
   <p><label for="c-llegada">Llegada tentativa a almacén</label><input type="date" id="c-llegada" value="${esc(s.fecha_tentativa||"")}"></p>
@@ -620,6 +653,9 @@ function compraUI(id){
 }
 async function guardarCompra(id){
   const estatus = $("c-est").value;
+  const pais_compra = $("c-pais")?.value||"";
+  const tipo = pais_compra ? "internacional" : $("c-tipo").value;
+  if(tipo==="internacional" && !pais_compra){ alert("Selecciona USA o China."); return; }
   const fecha_tentativa = $("c-llegada").value;
   if(["comprado","en_transito"].includes(estatus) && !fecha_tentativa){
     alert("Indica la fecha tentativa de llegada a almacén.");
@@ -627,7 +663,7 @@ async function guardarCompra(id){
     return;
   }
   const partidas = [...document.querySelectorAll("#modal-body tr[data-id]")].map(tr=>({id:+tr.dataset.id, moneda:tr.querySelector(".cm").value, precio:tr.querySelector(".cp").value}));
-  try{ await rpc("actualizar_compra",{p_token:S.token,p_id:id,p:{tipo:$("c-tipo").value,proveedor:$("c-prov").value,estatus,fecha_tentativa,partidas}});
+  try{ await rpc("actualizar_compra",{p_token:S.token,p_id:id,p:{tipo,pais_compra,proveedor:$("c-prov").value,estatus,fecha_tentativa,partidas}});
     cerrarModal(); await recargar(); aviso("Compra actualizada.", true); }
   catch(e){ aviso(e.message); cerrarModal(); }
 }
@@ -691,14 +727,15 @@ function osenHTML(f){
 }
 function detalleSol(s){
   const responsable = s.estatus==="por_aprobar" ? "Aprobación" : s.estatus==="por_comprar" ?
-    (s.tipo==="local" ? "Compras locales" : "Compras") : pendienteRecepcion(s) ? "Almacén" : "";
+    (s.tipo==="internacional" ? "Compras internacionales · Paco" : "Compras locales") : pendienteRecepcion(s) ? "Almacén" : "";
   const accion = accionTrabajo(s);
   const botones = {
     aprobar:`<button class="btn sm" onclick="aprobar(${Number(s.id)},true)">Aprobar</button> <button class="ghost sm bad" onclick="aprobar(${Number(s.id)},false)">Rechazar</button>`,
-    comprar:`<button class="btn sm" onclick="compraUI(${Number(s.id)})">Comprar</button>`,
+    comprar:botonesCompra(s),
     recibir:`<button class="btn sm" onclick="recibirUI(${Number(s.id)})">Recibir</button>`
   };
-  return `<h3>${esc(s.folio)} · ${pill(s.estatus)}${s.prioridad==="urgente"?' <span class="p urg">URGENTE</span>':""}</h3>
+  return `<h3>${esc(s.folio)} · ${estatusPedido(s)}${s.prioridad==="urgente"?' <span class="p urg">URGENTE</span>':""}</h3>
+  ${s.tipo==="internacional"?`<p class="mut">Origen ${esc(s.pais_compra||"Por definir")}${s.compra_iniciada_at?` · Compra iniciada ${fechaHora(s.compra_iniciada_at)}`:""}</p>`:""}
   ${responsable?`<p><b>Siguiente acción</b> · ${responsable} · ${botones[accion]||""}</p>`:""}
   ${fechasPedido(s,hoyMexico())}
   <p class="mut">Último movimiento ${fecha(s.updated_at||s.created_at)}${responsable && s.etapa_desde?` · ${tiempoEnEtapa(s.etapa_desde)}`:""}</p>
@@ -809,7 +846,7 @@ async function adminCargar(){
   }else if(ADM.sec==="usuarios"){
     try{ ADM.usuarios = await rpc("admin_usuarios",{p_token:S.token}); }catch(e){ b.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
     b.innerHTML = `<h2>Usuarios y roles</h2><div class="tbl"><table><thead><tr><th>Nombre</th><th>Puesto</th><th>Permisos</th><th>Activo</th><th></th></tr></thead><tbody>
-    ${ADM.usuarios.map(u=>`<tr><td>${esc(u.nombre)}</td><td>${esc(u.puesto||"")}</td><td>${u.permisos.map(p=>esc(PERMISOS[p]||p)).join(", ")}</td><td>${u.activo?"Sí":"No"}</td>
+    ${ADM.usuarios.map(u=>`<tr><td>${esc(u.nombre)}</td><td>${esc(u.puesto||"")}</td><td>${u.permisos.map(p=>esc(PERMISOS_ADMIN[p]||p)).join(", ")}</td><td>${u.activo?"Sí":"No"}</td>
      <td><button class="ghost sm" onclick="adminUsuario(${u.id})">Editar</button></td></tr>`).join("")}</tbody></table></div><br>
     <button class="btn" onclick="adminUsuario(null)">+ Nuevo usuario</button>`;
   }else{
@@ -874,7 +911,7 @@ function adminUsuario(id){
   abrirModal(`<h2>${id?"Editar":"Nuevo"} usuario</h2><div class="g">
   <div><label>Nombre</label><input id="u-n" value="${esc(u.nombre)}"></div><div><label>Puesto</label><input id="u-p" value="${esc(u.puesto||"")}"></div>
   <div><label>${id?"Nuevo código (vacío = no cambia)":"Código"}</label><input id="u-c" type="password"></div></div>
-  <label>Permisos</label>${Object.entries(PERMISOS).map(([k,v])=>`<label class="chk"><input type="checkbox" class="u-perm" value="${k}" ${u.permisos.includes(k)?"checked":""}>${v}</label>`).join("")}
+  <label>Permisos</label>${Object.entries(PERMISOS_ADMIN).map(([k,v])=>`<label class="chk"><input type="checkbox" class="u-perm" value="${k}" ${u.permisos.includes(k)?"checked":""}>${v}</label>`).join("")}
   <label class="chk"><input type="checkbox" id="u-a" ${u.activo?"checked":""}>Activo</label><br><br>
   <button class="btn" onclick="adminGuardarUsuario(${id})">Guardar</button> <button class="ghost" onclick="cerrarModal()">Cancelar</button>`);
 }
