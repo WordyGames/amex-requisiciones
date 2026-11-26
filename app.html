@@ -316,6 +316,7 @@ function vNueva(){
     <div><label>OSEN <span class="req">*</span></label><input id="n-osen" placeholder="OSEN-2836"></div>
     <div><label>Prioridad</label><select id="n-pri"><option value="normal">Normal</option><option value="urgente">Urgente (equipo parado)</option></select></div>
     <div><label for="n-fecha">Fecha requerida <span class="req">*</span></label><input type="date" id="n-fecha" required></div>
+    <div><label for="n-llegada">Llegada tentativa a almacén <span class="req">*</span></label><input type="date" id="n-llegada" required></div>
   </div>
   <label>Partidas</label>
   <div class="tbl"><table><thead><tr><th>Descripción *</th><th>No. parte</th><th style="width:80px">Cant.</th><th style="width:90px">Moneda</th><th style="width:120px">Precio estimado</th><th></th></tr></thead><tbody id="n-partidas"></tbody></table></div>
@@ -338,14 +339,14 @@ function leerPartidas(destino){
   })).filter(p=>p.descripcion);
 }
 async function guardarNueva(){
-  if(!$("n-fecha").reportValidity()) return;
+  if(!$("n-fecha").reportValidity() || !$("n-llegada").reportValidity()) return;
   const osen = $("n-osen").value.trim();
   if(!osen){ aviso("La OSEN es obligatoria."); $("n-osen").focus(); return; }
   const partidas = leerPartidas("n-partidas");
   if(!partidas.length){ aviso("Agrega al menos una partida con descripción."); return; }
   try{
     const r = await rpc("crear_solicitud", {p_token:S.token, p:{empresa:$("n-emp").value, osen, prioridad:$("n-pri").value,
-      fecha_requerida:$("n-fecha").value, notas:$("n-notas").value, partidas}});
+      fecha_requerida:$("n-fecha").value, fecha_tentativa:$("n-llegada").value, notas:$("n-notas").value, partidas}});
     await recargar(); vista="mias"; render(); aviso(`Solicitud ${r.folio} enviada.`, true);
   }catch(e){ aviso(e.message); }
 }
@@ -464,7 +465,8 @@ function editarPropia(id){
     <div class="g">
       ${completa?`<div><label for="pr-empresa">Empresa</label><select id="pr-empresa">${EMPRESAS.map(e=>`<option ${e===s.empresa?"selected":""}>${esc(e)}</option>`).join("")}</select></div>`:""}
       <div><label for="pr-osen">OSEN</label><input id="pr-osen" value="${esc(s.osen)}" required></div>
-      <div><label for="pr-fecha">Fecha requerida</label><input type="date" id="pr-fecha" value="${esc(s.fecha_requerida||"")}"></div>
+      <div><label for="pr-fecha">Fecha requerida <span class="req">*</span></label><input type="date" id="pr-fecha" value="${esc(s.fecha_requerida||"")}" required></div>
+      <div><label for="pr-llegada">Llegada tentativa a almacén <span class="req">*</span></label><input type="date" id="pr-llegada" value="${esc(s.fecha_tentativa||"")}" required></div>
       <div><label for="pr-prioridad">Prioridad</label><select id="pr-prioridad"><option value="normal">Normal</option><option value="urgente" ${s.prioridad==="urgente"?"selected":""}>Urgente</option></select></div>
     </div>
     ${completa?`<div class="tbl"><table><thead><tr><th>Descripción</th><th>No. parte</th><th>Cantidad</th><th>Moneda</th><th>Precio estimado</th><th></th></tr></thead><tbody id="pr-partidas"></tbody></table></div>
@@ -484,8 +486,9 @@ async function guardarPropia(id,boton){
   const error = $("pr-error");
   const osen = $("pr-osen").value.trim();
   if(!osen){ error.textContent = "La OSEN es obligatoria."; $("pr-osen").focus(); return; }
+  if(!$("pr-fecha").reportValidity() || !$("pr-llegada").reportValidity()) return;
   const p = {osen,actualizado:$("pr-osen").dataset.actualizado||null,fecha_requerida:$("pr-fecha").value,
-    prioridad:$("pr-prioridad").value,notas:$("pr-notas").value};
+    fecha_tentativa:$("pr-llegada").value, prioridad:$("pr-prioridad").value,notas:$("pr-notas").value};
   if($("pr-partidas")){
     const partidas = leerPartidas("pr-partidas");
     const empresa = $("pr-empresa").value;
