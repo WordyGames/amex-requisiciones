@@ -202,7 +202,7 @@ function menu(){
   if(tiene("solicitar")) m.push(["nueva","+ Nueva solicitud"],["mias","Mis solicitudes"]);
   if(tiene("aprobar")) m.push(["aprobar","Por aprobar", DATA.filter(s=>s.estatus==="por_aprobar").length]);
   if(tiene("comprar")) m.push(["comprar","Por comprar", DATA.filter(s=>s.estatus==="por_comprar" && puedeComprar(s)).length]);
-  else if(tiene("comprar_local") || tiene("ver_compras_locales")) m.push(["local","Compras locales", DATA.filter(esLocalPendiente).length]);
+  else if(tiene("comprar_local") || tiene("ver_compras_locales")) m.push(["local","Compras locales", DATA.filter(enColaLocal).length]);
   if(tiene("recibir")) m.push(["recibir","Por recibir"]);
   if(tiene("consulta") || tiene("comprar")) m.push(["osen","Pedidos por OSEN"]);
   if(tiene("seguimiento_internacional")) m.push(["seguimiento","Seguimiento internacional"]);
@@ -210,6 +210,7 @@ function menu(){
   return m;
 }
 const esLocalPendiente = s => ["por_comprar","comprado","en_transito"].includes(s.estatus) && (!s.tipo || s.tipo==="local");
+const enColaLocal = s => esLocalPendiente(s) || (s.estatus==="parcial" && (!s.tipo || s.tipo==="local"));
 const puedeComprar = s => s.tipo==="internacional" ? tiene("comprar_internacional") : tiene("comprar")||tiene("comprar_local");
 
 function pintarTabs(){
@@ -466,15 +467,17 @@ function render2(id){ const L = LISTAS[id]; $("t-"+id).innerHTML = tablaHTML(apl
 function tablaHTML(list, acciones){
   if(!list.length) return '<div class="empty">No hay pedidos aquí.</div>';
   const hoy = hoyMexico();
-  return `<table><thead><tr><th>Folio</th><th>OSEN</th><th>Fechas y plazo</th><th>Solicita</th><th>Partidas</th><th>Proveedor</th><th style="text-align:right">Total</th><th>Estatus</th><th></th></tr></thead><tbody>
+  const locales = vista==="local";
+  return `<table><thead><tr><th>${locales?"Folio y estatus":"Folio"}</th><th>OSEN</th><th>Fechas y plazo</th><th>Solicita</th><th>Partidas</th><th>Proveedor</th><th style="text-align:right">Total</th>${locales?"":"<th>Estatus</th>"}<th></th></tr></thead><tbody>
   ${list.map(s=>`<tr>
-    <td><span class="lnk" onclick="verSolicitud(${s.id})">${esc(s.folio)}</span>${s.prioridad==="urgente"?' <span class="p urg">URGENTE</span>':""}</td>
+    <td><span class="lnk" onclick="verSolicitud(${s.id})">${esc(s.folio)}</span>${s.prioridad==="urgente"?' <span class="p urg">URGENTE</span>':""}
+      ${locales?`<div>${estatusPedido(s)}</div>${puedeRecibir(s)?`<div>${botonCambiarEstatus(s)}</div>`:""}`:""}</td>
     <td><button class="ghost sm" data-osen="${esc(s.osen)}" onclick="verOsen(this.dataset.osen)">${esc(s.osen)}</button>${vista==="seguimiento"?notasOsen([s]):""}</td>
     <td>${fechasPedido(s,hoy)}</td><td>${esc(s.solicita_nombre||"—")}</td>
     <td>${(s.partidas||[]).slice(0,2).map(p=>esc(p.descripcion)+(vista==="recibir"?` · Faltan ${Math.max(0,Number(p.cantidad)-Number(p.cantidad_recibida||0))}`:"")).join(", ")}${(s.partidas||[]).length>2?` +${s.partidas.length-2}`:""}</td>
     <td>${esc(s.proveedor||"—")}${s.tipo?`<div class="mut">${esc(s.pais_compra||s.tipo)}${s.tipo==="internacional"?` · ${esc(s.comprador_nombre||"Paco")}`:""}</div>`:""}</td>
     <td style="text-align:right;white-space:nowrap">${money(s.total_mxn)}<div class="mut">${money(s.total_usd,"USD")}</div></td>
-    <td>${estatusPedido(s)}${puedeRecibir(s)?`<div>${botonCambiarEstatus(s)}</div>`:""}${vista==="trabajo" && s.etapa_desde?`<div class="mut">${tiempoEnEtapa(s.etapa_desde)}</div>`:""}</td>
+    ${locales?"":`<td>${estatusPedido(s)}${puedeRecibir(s)?`<div>${botonCambiarEstatus(s)}</div>`:""}${vista==="trabajo" && s.etapa_desde?`<div class="mut">${tiempoEnEtapa(s.etapa_desde)}</div>`:""}</td>`}
     <td style="white-space:nowrap">${acciones?acciones(s):""}</td></tr>`).join("")}</tbody></table>`;
 }
 
@@ -635,8 +638,10 @@ function vSeguimiento(){
   return `<div class="card"><h2>Seguimiento internacional</h2>${tablaLista("seguimiento",pedidos)}</div>`;
 }
 function vLocal(){
-  const l = DATA.filter(esLocalPendiente);
-  return `<div class="card"><h2>Compras locales</h2>${tablaLista("local",l,s=>puedeComprar(s)?`<button class="btn sm" onclick="compraUI(${s.id})">Comprar</button>`:"")}</div>`;
+  const l = DATA.filter(enColaLocal);
+  return `<div class="card"><h2>Compras locales</h2>
+    ${tiene("recibir")?'<p class="mut">Para registrar una llegada, pulsa Cambiar estatus debajo del folio cuando el pedido esté Comprado, En tránsito o Recibido parcial.</p>':""}
+    ${tablaLista("local",l,s=>esLocalPendiente(s) && puedeComprar(s)?`<button class="btn sm" onclick="compraUI(${s.id})">Comprar</button>`:"")}</div>`;
 }
 function compraUI(id){
   const s = DATA.find(x=>x.id===id);
