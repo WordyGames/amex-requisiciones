@@ -150,7 +150,9 @@ function pintarTabs(){
   const m = menu();
   if(!m.find(x=>x[0]===vista)) vista = m[0]?.[0];
   $("tabs").innerHTML = m.map(([id,t,n])=>`<button class="tab ${id===vista?'on':''}" onclick="ir('${id}')">${esc(t)}${n?`<span class="n">${n}</span>`:""}</button>`).join("");
-  $("who").innerHTML = `${esc(S.nombre)}${TC.valor?` · TC $${TC.valor}`:""}<a onclick="salir()">Salir</a>`;
+  const avisosOn = localStorage.getItem("liumaq_avisos")==="1" && (!("Notification" in window) || Notification.permission==="granted");
+  $("who").innerHTML = `${esc(S.nombre)}${TC.valor?` · TC $${TC.valor}`:""}
+    <a onclick="activarAvisos()">${avisosOn?"Avisos activos":"Activar avisos"}</a><a onclick="salir()">Salir</a>`;
 }
 function ir(id){ vista = id; aviso(""); render(); }
 
@@ -158,9 +160,66 @@ async function arrancar(){
   $("v-login").classList.add("hidden"); $("v-app").classList.remove("hidden");
   await recargar();
 }
+// ---------- avisos (notificaciones + sonido) ----------
+let PREV = null, audioCtx = null, poll = null;
+function misPendientes(){
+  const ids = new Set();
+  DATA.forEach(s=>{
+    if(tiene("aprobar") && s.estatus==="por_aprobar") ids.add(s.id);
+    if(tiene("comprar") && s.estatus==="por_comprar") ids.add(s.id);
+    else if(tiene("comprar_local") && s.estatus==="por_comprar" && (!s.tipo||s.tipo==="local")) ids.add(s.id);
+    if(tiene("recibir") && ["comprado","en_transito"].includes(s.estatus)) ids.add(s.id);
+  });
+  return ids;
+}
+function activarAvisos(){
+  try{ audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)(); audioCtx.resume(); }catch(e){}
+  if("Notification" in window && Notification.permission==="default") Notification.requestPermission().then(pintarTabs);
+  sonar(); localStorage.setItem("liumaq_avisos","1"); pintarTabs();
+}
+function sonar(){
+  try{
+    audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)();
+    [0,0.18].forEach((t,i)=>{ const o=audioCtx.createOscillator(), g=audioCtx.createGain();
+      o.frequency.value = i?1180:880; o.connect(g); g.connect(audioCtx.destination);
+      g.gain.setValueAtTime(0.25, audioCtx.currentTime+t); g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime+t+0.16);
+      o.start(audioCtx.currentTime+t); o.stop(audioCtx.currentTime+t+0.17); });
+  }catch(e){}
+}
+function avisar(titulo, cuerpo){
+  sonar();
+  aviso(titulo + ": " + cuerpo, true);
+  if("Notification" in window && Notification.permission==="granted"){
+    try{ const n = new Notification(titulo, {body:cuerpo, tag:"liumaq-"+Date.now()}); n.onclick=()=>{window.focus();n.close();}; }catch(e){}
+  }
+}
+function revisarAvisos(){
+  const pend = misPendientes(), est = Object.fromEntries(DATA.map(s=>[s.id,s.estatus]));
+  if(PREV){
+    const nuevos = DATA.filter(s=>pend.has(s.id) && !PREV.pend.has(s.id));
+    if(nuevos.length) avisar(nuevos.length===1?"Nuevo pendiente":`${nuevos.length} nuevos pendientes`,
+      nuevos.slice(0,3).map(s=>`${s.folio} · ${s.osen} · ${ESTATUS[s.estatus]}${s.prioridad==="urgente"?" · URGENTE":""}`).join("\n"));
+    const mios = DATA.filter(s=>s.solicita_nombre===S.nombre && PREV.est[s.id] && PREV.est[s.id]!==s.estatus);
+    if(mios.length) avisar("Tu solicitud cambió", mios.slice(0,3).map(s=>`${s.folio} · ${s.osen} → ${ESTATUS[s.estatus]}`).join("\n"));
+  }
+  PREV = {pend, est};
+  document.title = (pend.size?`(${pend.size}) `:"") + "Liumaq · Requisiciones";
+}
+async function sondeo(){
+  if(!S) return;
+  try{
+    [DATA, TC] = await Promise.all([rpc("listar_solicitudes",{p_token:S.token}), rpc("tc_actual")]);
+    revisarAvisos();
+    const ocupado = vista==="nueva" || !$("modal").classList.contains("hidden") || ["INPUT","TEXTAREA","SELECT"].includes(document.activeElement?.tagName);
+    if(ocupado) pintarTabs(); else render();
+  }catch(e){}
+}
+
 async function recargar(){
   try{
     [DATA, TC] = await Promise.all([rpc("listar_solicitudes",{p_token:S.token}), rpc("tc_actual")]);
+    revisarAvisos();
+    if(!poll) poll = setInterval(sondeo, 30000);
     render();
   }catch(e){
     if(/Sesión|expirada/i.test(e.message)){ aviso("Tu sesión expiró, vuelve a entrar."); sessionStorage.removeItem("liumaq_req"); setTimeout(()=>location.reload(),1500); }
