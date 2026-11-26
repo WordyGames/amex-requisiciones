@@ -122,8 +122,16 @@ function aviso(t, ok){
   setTimeout(()=>mensaje.remove(), 5000);
 }
 async function rpc(fn, args){ const {data,error} = await sb.rpc(fn, args); if(error) throw new Error(error.message); return data; }
-function cerrarModal(){ $("modal").classList.add("hidden"); }
-function abrirModal(html){ $("modal-body").innerHTML = html; $("modal").classList.remove("hidden"); }
+let detalleEnVivo = null;
+function cerrarModal(){
+  detalleEnVivo = null;
+  $("modal").classList.add("hidden");
+}
+function abrirModal(html,actualizar=null){
+  detalleEnVivo = actualizar ? {actualizar,html} : null;
+  $("modal-body").innerHTML = html;
+  $("modal").classList.remove("hidden");
+}
 
 // ---------- login ----------
 async function initLogin(){
@@ -250,15 +258,13 @@ async function sincronizarAvisos(leidos=[]){
 function estadoCarga(error){
   const estado = $("sync");
   estado.classList.toggle("hidden", !error && !ultimaCarga);
-  const hora = ultimaCarga?.toLocaleTimeString("es-MX",{hour:"2-digit",minute:"2-digit"});
+  const hora = ultimaCarga?.toLocaleTimeString("es-MX",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
   estado.textContent = error ? `No se pudieron actualizar los pedidos.${hora?` Última actualización ${hora}.`:""}` : `Actualizado a las ${hora}`;
-  if(error){
-    const reintentar = document.createElement("button");
-    reintentar.className = "ghost sm";
-    reintentar.textContent = "Reintentar";
-    reintentar.onclick = sondeo;
-    estado.append(" ",reintentar);
-  }
+  const actualizar = document.createElement("button");
+  actualizar.className = "ghost sm";
+  actualizar.textContent = error ? "Reintentar" : "Actualizar ahora";
+  actualizar.onclick = sondeo;
+  estado.append(" ",actualizar);
 }
 async function cargarDatos(){
   const numero = ++solicitudCarga;
@@ -283,18 +289,46 @@ async function cargarDatos(){
     return false;
   }
 }
+const INTERVALO_ACTUALIZACION = 15000;
+let sondeando = false, ultimoSondeo = 0;
 async function sondeo(){
-  if(!S || !await cargarDatos()) return;
-  const ocupado = vista==="nueva" || vista==="admin" || !$("modal").classList.contains("hidden") || ["INPUT","TEXTAREA","SELECT"].includes(document.activeElement?.tagName);
-  if(ocupado) pintarTabs(); else render();
+  if(!S || sondeando) return;
+  sondeando = true;
+  ultimoSondeo = Date.now();
+  try{
+    if(!await cargarDatos()) return;
+    if(vista==="nueva" || (vista==="admin" && ADM.sec!=="pedidos")) pintarTabs();
+    else render();
+
+    if(detalleEnVivo){
+      const html = detalleEnVivo.actualizar();
+      if(html!==detalleEnVivo.html){
+        const posicion = $("modal").scrollTop;
+        $("modal-body").innerHTML = html;
+        $("modal").scrollTop = posicion;
+        detalleEnVivo.html = html;
+      }
+    }
+  }finally{ sondeando = false; }
 }
 
 async function recargar(){
-  if(!poll) poll = setInterval(sondeo, 30000);
+  if(!poll) poll = setInterval(()=>{ if(!document.hidden) sondeo(); },INTERVALO_ACTUALIZACION);
   if(await cargarDatos()) render();
 }
+function actualizarAlVolver(){
+  if(!document.hidden && Date.now()-ultimoSondeo>=2000) sondeo();
+}
+document.addEventListener("visibilitychange",actualizarAlVolver);
+window.addEventListener("focus",actualizarAlVolver);
+window.addEventListener("online",sondeo);
 function render(){
   pintarTabs();
+  const campoActivo = document.activeElement;
+  const foco = campoActivo?.id?.startsWith("f-") ? campoActivo.id : null;
+  const seleccion = foco && campoActivo.selectionStart!==null ? [campoActivo.selectionStart,campoActivo.selectionEnd] : null;
+  const tabla = vista==="admin" ? "adm" : vista;
+  const posicionTabla = $("t-"+tabla)?.scrollLeft||0;
   const filtros = Object.fromEntries([...$("v-app").querySelectorAll('[id^="f-"]')]
     .map(campo=>[campo.id,campo.value]));
   const v = {trabajo:vTrabajo, nueva:vNueva, mias:vMias, aprobar:vAprobar, comprar:vComprar, local:vLocal, recibir:vRecibir, osen:vOsen, admin:vAdmin}[vista];
@@ -305,7 +339,12 @@ function render(){
     if($(id)) $(id).value = valor;
   }
   if(vista==="osen") pintarOsen();
-  else if(LISTAS[vista] && $("t-"+vista)) render2(vista);
+  else if(LISTAS[tabla] && $("t-"+tabla)) render2(tabla);
+  if($("t-"+tabla)) $("t-"+tabla).scrollLeft = posicionTabla;
+  if(foco && $(foco)){
+    $(foco).focus({preventScroll:true});
+    if(seleccion && $(foco).tagName==="INPUT") $(foco).setSelectionRange(...seleccion);
+  }
 }
 
 // ---------- nueva solicitud ----------
@@ -613,7 +652,8 @@ function osenHTML(f){
   return `<table><thead><tr><th>OSEN</th><th>Pedidos</th><th>Quién</th><th>Última fecha</th><th style="text-align:right">Total</th><th>Avance</th></tr></thead><tbody>
   ${f.map(r=>`<tr><td><button class="ghost sm" data-osen="${esc(r.osen)}" onclick="verOsen(this.dataset.osen)">${esc(r.osen)}</button></td><td>${r.n}</td><td>${esc(r.quien)}</td><td>${fecha(r.ult)}</td>
   <td style="text-align:right;white-space:nowrap">${money(r.tot)}<div class="mut">${money(r.totU,"USD")}</div></td>
-  <td>${r.rec===r.n?pill("recibido"):r.n===1?pill(r.l[0].estatus):`<span class="p">${r.rec} de ${r.n} recibidos</span>`}</td></tr>`).join("")}</tbody></table>`;
+  <td>${r.rec===r.n?pill("recibido"):r.n===1?pill(r.l[0].estatus):`<span class="p">${r.rec} de ${r.n} recibidos</span>
+    ${r.l.some(s=>s.estatus==="parcial")?`<span class="p st-parcial">${r.l.filter(s=>s.estatus==="parcial").length} parcial(es)</span>`:""}`}</td></tr>`).join("")}</tbody></table>`;
 }
 function detalleSol(s){
   const responsable = s.estatus==="por_aprobar" ? "Aprobación" : s.estatus==="por_comprar" ?
@@ -639,16 +679,25 @@ function detalleSol(s){
   ${s.notas?`<p class="mut">Notas: ${esc(s.notas)}</p>`:""}`;
 }
 function verOsen(osen){
+  const actualizar = ()=>contenidoOsen(osen);
+  abrirModal(actualizar(),actualizar);
+}
+function contenidoOsen(osen){
   const l = DATA.filter(s=>s.osen===osen);
   const tot = l.reduce((a,s)=>a+Number(s.total_mxn),0);
-  abrirModal(`<button class="ghost" style="float:right" onclick="cerrarModal()">Cerrar</button>
-  <h2>${esc(osen)}</h2><p class="mut">${l.length} pedido(s) · ${money(tot)}</p>${l.map(detalleSol).join("<hr>")}`);
+  return `<button class="ghost" style="float:right" onclick="cerrarModal()">Cerrar</button>
+  <h2>${esc(osen)}</h2><p class="mut">${l.length} pedido(s) · ${money(tot)}</p>${l.map(detalleSol).join("<hr>")}`;
 }
 function verSolicitud(id){
+  const actualizar = ()=>contenidoSolicitud(id);
+  abrirModal(actualizar(),actualizar);
+}
+function contenidoSolicitud(id){
   const s = DATA.find(x=>x.id===id);
-  if(!s){ alert("Este pedido ya no está disponible para tu usuario."); return; }
-  abrirModal(`<button class="ghost" style="float:right" onclick="cerrarModal()">Cerrar</button><h2>${esc(s.osen)}</h2>${botonEditarPropia(s)}${detalleSol(s)}
-  <h3>Historial</h3>${(s.eventos||[]).map(e=>`<div class="mut">${new Date(e.created_at).toLocaleString("es-MX")} · ${esc(e.usuario)} ${esc(e.accion)} ${esc(e.detalle||"")}</div>`).join("")||'<div class="mut">—</div>'}`);
+  const cerrar = '<button class="ghost" style="float:right" onclick="cerrarModal()">Cerrar</button>';
+  if(!s) return cerrar+'<p>Este pedido ya no está disponible para tu usuario.</p>';
+  return `${cerrar}<h2>${esc(s.osen)}</h2>${botonEditarPropia(s)}${detalleSol(s)}
+  <h3>Historial</h3>${(s.eventos||[]).map(e=>`<div class="mut">${new Date(e.created_at).toLocaleString("es-MX")} · ${esc(e.usuario)} ${esc(e.accion)} ${esc(e.detalle||"")}</div>`).join("")||'<div class="mut">—</div>'}`;
 }
 
 // ---------- exportar / importar ----------
