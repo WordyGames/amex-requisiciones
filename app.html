@@ -189,6 +189,10 @@ function salir(){ sessionStorage.removeItem("liumaq_req"); S=null; location.relo
 
 // ---------- navegación ----------
 const pendienteRecepcion = s => ["comprado","en_transito","parcial"].includes(s.estatus);
+const puedeRecibir = s => Boolean(s && tiene("recibir") && pendienteRecepcion(s));
+function botonCambiarEstatus(s){
+  return puedeRecibir(s) ? `<button type="button" class="ghost sm" onclick="recibirUI(${Number(s.id)})">Cambiar estatus</button>` : "";
+}
 const cantidadPendiente = n => n===1 ? "1 pedido pendiente" : `${n} pedidos pendientes`;
 function menu(){
   const m = [];
@@ -249,7 +253,7 @@ async function abrirAvisos(){
 function accionTrabajo(s){
   if(s.estatus==="por_aprobar" && tiene("aprobar")) return "aprobar";
   if(s.estatus==="por_comprar" && puedeComprar(s)) return "comprar";
-  if(pendienteRecepcion(s) && tiene("recibir")) return "recibir";
+  if(puedeRecibir(s)) return "recibir";
   return "";
 }
 async function alternarSonido(){
@@ -468,7 +472,7 @@ function tablaHTML(list, acciones){
     <td>${(s.partidas||[]).slice(0,2).map(p=>esc(p.descripcion)+(vista==="recibir"?` · Faltan ${Math.max(0,Number(p.cantidad)-Number(p.cantidad_recibida||0))}`:"")).join(", ")}${(s.partidas||[]).length>2?` +${s.partidas.length-2}`:""}</td>
     <td>${esc(s.proveedor||"—")}${s.tipo?`<div class="mut">${esc(s.pais_compra||s.tipo)}${s.tipo==="internacional"?` · ${esc(s.comprador_nombre||"Paco")}`:""}</div>`:""}</td>
     <td style="text-align:right;white-space:nowrap">${money(s.total_mxn)}<div class="mut">${money(s.total_usd,"USD")}</div></td>
-    <td>${estatusPedido(s)}${vista==="trabajo" && s.etapa_desde?`<div class="mut">${tiempoEnEtapa(s.etapa_desde)}</div>`:""}</td>
+    <td>${estatusPedido(s)}${puedeRecibir(s)?`<div>${botonCambiarEstatus(s)}</div>`:""}${vista==="trabajo" && s.etapa_desde?`<div class="mut">${tiempoEnEtapa(s.etapa_desde)}</div>`:""}</td>
     <td style="white-space:nowrap">${acciones?acciones(s):""}</td></tr>`).join("")}</tbody></table>`;
 }
 
@@ -517,7 +521,8 @@ function vTrabajo(){
   return `<div class="card"><h2>Mi trabajo</h2><p class="mut">${cantidadPendiente(pendientes.length)}</p>
     ${tablaLista("trabajo",pendientes,s=>{
       const accion = accionTrabajo(s);
-      const acciones = {aprobar:["Revisar","verSolicitud"], comprar:["Comprar","compraUI"], recibir:["Recibir","recibirUI"]};
+      if(accion==="recibir") return "";
+      const acciones = {aprobar:["Revisar","verSolicitud"], comprar:["Comprar","compraUI"]};
       const [texto,fn] = acciones[accion];
       return `<button class="btn sm" onclick="${fn}(${Number(s.id)})">${texto}</button>`;
     })}</div>`;
@@ -669,15 +674,24 @@ async function guardarCompra(id){
 }
 function vRecibir(){
   const l = DATA.filter(pendienteRecepcion);
-  return `<div class="card"><h2>Por recibir</h2><p class="mut">${cantidadPendiente(l.length)}</p>${tablaLista("recibir", l, s=>`<button class="btn sm" onclick="recibirUI(${s.id})">Recibir</button>`)}</div>`;
+  return `<div class="card"><h2>Por recibir</h2><p class="mut">${cantidadPendiente(l.length)}</p>${tablaLista("recibir",l)}</div>`;
 }
 function recibirUI(id){
   const s = DATA.find(x=>x.id===id);
-  abrirModal(`<h2>Recibir ${esc(s.folio)} · ${esc(s.osen)}</h2><p class="mut">Proveedor: ${esc(s.proveedor||"—")}</p>
+  if(!puedeRecibir(s)){ aviso("El pedido ya no está pendiente de recepción o tu perfil no tiene este permiso."); return; }
+  abrirModal(`<h2>Cambiar estatus · ${esc(s.folio)}</h2><p>${esc(s.osen)} · ${estatusPedido(s)} · Proveedor ${esc(s.proveedor||"—")}</p>
+  <p class="mut">Captura cuánto llegó de cada partida. Si queda material pendiente, el pedido pasa a Recibido parcial. Si llegó todo, pasa a Recibido.</p>
+  <p><button type="button" class="ghost sm" onclick="llenarRecepcion(true)">Llegó todo lo pendiente</button>
+  <button type="button" class="ghost sm" onclick="llenarRecepcion(false)">Capturar llegada parcial</button></p>
   <div class="tbl"><table><thead><tr><th>Descripción</th><th>No. parte</th><th>Pedido</th><th>Ya recibido</th><th>Llegó ahora</th></tr></thead><tbody>
   ${s.partidas.map(p=>{const f=p.cantidad-p.cantidad_recibida;return `<tr data-id="${p.id}"><td>${esc(p.descripcion)}</td><td>${esc(p.no_parte||"")}</td><td>${p.cantidad}</td><td>${p.cantidad_recibida}</td>
-   <td><input class="rc" type="number" min="0" max="${f}" step="any" value="${f}"></td></tr>`}).join("")}</tbody></table></div><br>
+   <td><input class="rc" type="number" min="0" max="${f}" step="any" value="0"></td></tr>`}).join("")}</tbody></table></div><br>
   <button class="btn" onclick="guardarRecibo(${id},this)">Confirmar recepción</button> <button class="ghost" onclick="cerrarModal()">Cancelar</button>`);
+}
+function llenarRecepcion(completa){
+  const campos = [...$("modal-body").querySelectorAll(".rc")];
+  campos.forEach(campo=>{ campo.value = completa ? campo.max : "0"; });
+  if(!completa) campos.find(campo=>Number(campo.max)>0)?.focus();
 }
 async function guardarRecibo(id, boton){
   if(boton.disabled) return;
@@ -732,7 +746,7 @@ function detalleSol(s){
   const botones = {
     aprobar:`<button class="btn sm" onclick="aprobar(${Number(s.id)},true)">Aprobar</button> <button class="ghost sm bad" onclick="aprobar(${Number(s.id)},false)">Rechazar</button>`,
     comprar:botonesCompra(s),
-    recibir:`<button class="btn sm" onclick="recibirUI(${Number(s.id)})">Recibir</button>`
+    recibir:botonCambiarEstatus(s)
   };
   return `<h3>${esc(s.folio)} · ${estatusPedido(s)}${s.prioridad==="urgente"?' <span class="p urg">URGENTE</span>':""}</h3>
   ${s.tipo==="internacional"?`<p class="mut">Origen ${esc(s.pais_compra||"Por definir")}${s.compra_iniciada_at?` · Compra iniciada ${fechaHora(s.compra_iniciada_at)}`:""}</p>`:""}
