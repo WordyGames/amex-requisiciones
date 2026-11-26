@@ -102,7 +102,7 @@ const sb = supabase.createClient("https://iwnbscekenptumanpjcs.supabase.co",
 const ESTATUS = {por_aprobar:"Por aprobar",rechazada:"Rechazada",por_comprar:"Por comprar",comprado:"Comprado",
   en_transito:"En tránsito",parcial:"Recibido parcial",recibido:"Recibido",cancelada:"Cancelada"};
 const PERMISOS = {solicitar:"Solicitar",comprar:"Comprar (todo)",comprar_local:"Compra local",recibir:"Recibir (almacén)",aprobar:"Aprobar",consulta:"Consulta",admin:"Admin"};
-const PERMISOS_ADMIN = {...PERMISOS,comprar_internacional:"Compra internacional",seguimiento_internacional:"Seguimiento internacional"};
+const PERMISOS_ADMIN = {...PERMISOS,ver_compras_locales:"Ver compras locales",comprar_internacional:"Compra internacional",seguimiento_internacional:"Seguimiento internacional"};
 const EMPRESAS = ["Liumaq","AMEX Machinery"];
 
 let S = null;            // sesión {token,nombre,permisos}
@@ -202,7 +202,7 @@ function menu(){
   if(tiene("solicitar")) m.push(["nueva","+ Nueva solicitud"],["mias","Mis solicitudes"]);
   if(tiene("aprobar")) m.push(["aprobar","Por aprobar", DATA.filter(s=>s.estatus==="por_aprobar").length]);
   if(tiene("comprar")) m.push(["comprar","Por comprar", DATA.filter(s=>s.estatus==="por_comprar" && puedeComprar(s)).length]);
-  else if(tiene("comprar_local")) m.push(["local","Compras locales", DATA.filter(esLocalPendiente).length]);
+  else if(tiene("comprar_local") || tiene("ver_compras_locales")) m.push(["local","Compras locales", DATA.filter(esLocalPendiente).length]);
   if(tiene("recibir")) m.push(["recibir","Por recibir"]);
   if(tiene("consulta") || tiene("comprar")) m.push(["osen","Pedidos por OSEN"]);
   if(tiene("seguimiento_internacional")) m.push(["seguimiento","Seguimiento internacional"]);
@@ -636,7 +636,7 @@ function vSeguimiento(){
 }
 function vLocal(){
   const l = DATA.filter(esLocalPendiente);
-  return `<div class="card"><h2>Compras locales</h2>${tablaLista("local", l, s=>`<button class="btn sm" onclick="compraUI(${s.id})">Comprar</button>`)}</div>`;
+  return `<div class="card"><h2>Compras locales</h2>${tablaLista("local",l,s=>puedeComprar(s)?`<button class="btn sm" onclick="compraUI(${s.id})">Comprar</button>`:"")}</div>`;
 }
 function compraUI(id){
   const s = DATA.find(x=>x.id===id);
